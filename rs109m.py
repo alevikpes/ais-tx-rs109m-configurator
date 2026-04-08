@@ -252,6 +252,20 @@ if __name__ == "__main__":
     import serial
     import re
 
+    max_retries = 3
+
+    def serial_cmd(ser, tx_bytes, expected_prefix, read_extra=0):
+        # Send command and check response, with retries. Returns full response bytes.
+        for attempt in range(max_retries):
+            ser.reset_input_buffer()
+            ser.write(tx_bytes)
+            r = ser.read(len(expected_prefix))
+            if r == expected_prefix:
+                if read_extra > 0:
+                    return r + ser.read(read_extra)
+                return r
+        return None
+
     parser = argparse.ArgumentParser(description = 'RS-109M Net Locator AIS buoy configurator')
     parser.add_argument("-d", "--device", help="serial port device (e.g. /dev/ttyUSB0)")
     parser.add_argument("-m", "--mmsi", help="MMSI")
@@ -268,8 +282,8 @@ if __name__ == "__main__":
     parser.add_argument("-D", "--refd", help="Reference D (distance AIS to starboard (m)")
     password_default = '000000'
     parser.add_argument("-P", "--password", help="password to access Net Locator")
-    parser.add_argument("--setpass", help="set new password (requires -P with current password)")
-    parser.add_argument("--clearpass", help="clear password (requires -P with current password)", action='store_true')
+    parser.add_argument("--setpass", help="set new password (use -P for current password, default 000000)")
+    parser.add_argument("--clearpass", help="clear password (use -P for current password, default 000000)", action='store_true')
     parser.add_argument("-E", "--extended", help="operate on 0xff size config instead of default 0x40", action='store_true')
     parser.add_argument("-W", "--write", help="write config to Net Locator", action='store_true')
     parser.add_argument("-R", "--noread", help="do not read from Net Locator", action='store_true')
@@ -305,42 +319,57 @@ if __name__ == "__main__":
         ser.read(0xffff)
         ser.timeout = 3
 
+        password_maxlen = 6
+        password_prepared = password_default.encode()[:password_maxlen]
+
         if args.password != None:
             password = args.password
-
-            password_maxlen = 6
 
             if not re.match("^[0-9]{0,"+str(password_maxlen)+"}$", password):
                 print("Password: incorrect format, should match [0-9]{0,"+str(password_maxlen)+"}")
                 exit(1)
 
             password_prepared = (password.encode() + password_default.encode())[:password_maxlen]
-            ser.write([0x59, 0x01, 0x42, password_maxlen])
-            ser.write(password_prepared)
+            auth_cmd = bytes([0x59, 0x01, 0x42, password_maxlen]) + password_prepared
         else:
             # This seems to work even with a password set
-            ser.write([0x59, 0x01, 0x42, 0x00])
+            auth_cmd = bytes([0x59, 0x01, 0x42, 0x00])
 
-        r = ser.read(2)
-
-        if r != b'\x95\x20':
+        r = serial_cmd(ser, auth_cmd, b'\x95\x20')
+        if r is None and args.password != None:
+            # zero-length password seems to work even with a password set on some devices
+            r = serial_cmd(ser, bytes([0x59, 0x01, 0x42, 0x00]), b'\x95\x20')
+        if r is None:
             print('Could not initialize with password.')
             exit(1)
 
-        if args.noread == False:
-            ser.write([0x51, num_bytes])
-            r = ser.read(2)
-            if r != bytes([0x25, num_bytes]):
-                print("Could not read config, got this instead:")
-                print(r.hex(' '))
+        if args.clearpass:
+            r = serial_cmd(ser, bytes([0x59, 0x02, 0x42, password_maxlen]) + password_prepared, b'\x95\x20')
+            if r is None:
+                print('Clear password failed.')
                 exit(1)
+            print('Password cleared successfully!')
+            exit(0)
 
-            config = ser.read(num_bytes)
-            if len(config) == num_bytes:
-                c.config = config
-            else:
+        if args.setpass != None:
+            newpass = args.setpass
+            if not re.match("^[0-9]{1,"+str(password_maxlen)+"}$", newpass):
+                print("New password: incorrect format, should match [0-9]{1,"+str(password_maxlen)+"}")
+                exit(1)
+            newpass_prepared = (newpass.encode() + password_default.encode())[:password_maxlen]
+            r = serial_cmd(ser, bytes([0x59, 0x03, 0x42, password_maxlen]) + password_prepared + newpass_prepared, b'\x95\x20')
+            if r is None:
+                print('Set password failed.')
+                exit(1)
+            print('Password set successfully!')
+            exit(0)
+
+        if args.noread == False:
+            r = serial_cmd(ser, bytes([0x51, num_bytes]), bytes([0x25, num_bytes]), read_extra=num_bytes)
+            if r is None or len(r) != 2 + num_bytes:
                 print("Could not read config from device")
                 exit(1)
+            c.config = r[2:]
     else:
         print('Operating on default config:')
         print()
@@ -397,11 +426,9 @@ if __name__ == "__main__":
     print('[ 0x' + c.config[:num_bytes].hex('#').replace('#',', 0x') + ' ]')
 
     if args.device != None and args.write:
-        ser.write([0x55, num_bytes])
-        ser.write(c.config[:num_bytes])
-
-        r = ser.read(2)
-        if r != bytes([0x75, num_bytes]):
+        write_cmd = bytes([0x55, num_bytes]) + c.config[:num_bytes]
+        r = serial_cmd(ser, write_cmd, bytes([0x75, num_bytes]))
+        if r is None:
             print("Write failed")
             exit(1)
         else:
