@@ -249,7 +249,11 @@ class RS109_config:
 
 if __name__ == "__main__":
     import argparse
-    import serial
+    try:
+        import serial
+    except ModuleNotFoundError:
+        print("pyserial is required: pip install pyserial (or better use your package manager for this!)")
+        exit(1)
     import re
 
     max_retries = 3
@@ -275,8 +279,8 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--callsign", help="call sign")
     parser.add_argument("-v", "--vendorid", help="AIS unit vendor id (3 characters)")
     parser.add_argument("-u", "--unitmodel", help="AIS unit vendor model code")
-    parser.add_argument("-s", "--sernum", help="AIS unit serial num")
-    parser.add_argument("-A", "--refa", help="Reference A (distance AIS to bow (m); Net Locator sends battery voltage instead)")
+    parser.add_argument("-s", "--sernum", help="AIS unit serial num (some buoys report battery level %% here)")
+    parser.add_argument("-A", "--refa", help="Reference A (distance AIS to bow (m); some buoys report battery voltage here)")
     parser.add_argument("-B", "--refb", help="Reference B (distance AIS to stern (m)")
     parser.add_argument("-C", "--refc", help="Reference C (distance AIS to port (m)")
     parser.add_argument("-D", "--refd", help="Reference D (distance AIS to starboard (m)")
@@ -417,8 +421,8 @@ if __name__ == "__main__":
     print('  Callsign: %(callsign)s' % {'callsign': c.callsign})
     print('  VendorID: %(vendorid)s' % {'vendorid': c.vendorid})
     print('  UnitModel: %(unitmodel)d' % {'unitmodel': c.unitmodel})
-    print('  UnitSerial: %(sernum)d' % {'sernum': c.sernum})
-    print('  Reference point A (m): {:d} (read-only battery voltage {:.1f}V)' .format(c.refa, c.refa/10.00))
+    print('  UnitSerial: %(sernum)d (may be battery level %% on some buoys)' % {'sernum': c.sernum})
+    print('  Reference point A (m): {:d} (may be battery voltage {:.1f}V on some buoys)' .format(c.refa, c.refa/10.00))
     print('  Reference point B (m): %(refb)d' % {'refb': c.refb})
     print('  Reference point C (m): %(refc)d' % {'refc': c.refc})
     print('  Reference point D (m): %(refd)d' % {'refd': c.refd})
