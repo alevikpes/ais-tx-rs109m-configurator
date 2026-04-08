@@ -22,39 +22,45 @@ See [FCC statement](http://web.archive.org/web/20210806152632/https://docs.fcc.g
 
 
 ```
-usage: rs109m.py [-h] [-d DEVICE] [-m MMSI] [-n NAME] [-i INTERVAL] [-t TYPE] [-c CALLSIGN] [-v VENDORID] [-u UNITMODEL] [-s SERNUM] [-A REFA] [-B REFB] [-C REFC]
-                 [-D REFD] [-P PASSWORD] [-E] [-W] [-R]
+usage: rs109m.py [-h] [-d DEVICE] [-m MMSI] [-n NAME] [-i INTERVAL] [-t TYPE]
+                 [-c CALLSIGN] [-v VENDORID] [-u UNITMODEL] [-s SERNUM]
+                 [-A REFA] [-B REFB] [-C REFC] [-D REFD] [-P PASSWORD]
+                 [--setpass SETPASS] [--clearpass] [-E] [-W] [-R]
 
 RS-109M Net Locator AIS buoy configurator
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
-  -d DEVICE, --device DEVICE
-                        serial port device (e.g. /dev/ttyUSB0)
-  -m MMSI, --mmsi MMSI  MMSI
-  -n NAME, --name NAME  ship name
-  -i INTERVAL, --interval INTERVAL
+  -d, --device DEVICE   serial port device (e.g. /dev/ttyUSB0)
+  -m, --mmsi MMSI       MMSI
+  -n, --name NAME       ship name
+  -i, --interval INTERVAL
                         transmit interval in s [30..600]
-  -t TYPE, --type TYPE  ship type, eg sail=36, pleasure craft=37
-  -c CALLSIGN, --callsign CALLSIGN
+  -t, --type TYPE       ship type, eg sail=36, pleasure craft=37
+  -c, --callsign CALLSIGN
                         call sign
-  -v VENDORID, --vendorid VENDORID
+  -v, --vendorid VENDORID
                         AIS unit vendor id (3 characters)
-  -u UNITMODEL, --unitmodel UNITMODEL
+  -u, --unitmodel UNITMODEL
                         AIS unit vendor model code
-  -s SERNUM, --sernum SERNUM
-                        AIS unit serial num
-  -A REFA, --refa REFA  Reference A (distance AIS to bow (m); Net Locator sends battery voltage instead)
-  -B REFB, --refb REFB  Reference B (distance AIS to stern (m)
-  -C REFC, --refc REFC  Reference C (distance AIS toi port (m)
-  -D REFD, --refd REFD  Reference D (distance AIS to starboard (m)
-  -P PASSWORD, --password PASSWORD
+  -s, --sernum SERNUM   AIS unit serial num (some buoys report battery level %
+                        here)
+  -A, --refa REFA       Reference A (distance AIS to bow (m); some buoys
+                        report battery voltage here)
+  -B, --refb REFB       Reference B (distance AIS to stern (m)
+  -C, --refc REFC       Reference C (distance AIS to port (m)
+  -D, --refd REFD       Reference D (distance AIS to starboard (m)
+  -P, --password PASSWORD
                         password to access Net Locator
+  --setpass SETPASS     set new password (use -P for current password, default
+                        000000)
+  --clearpass           clear password (use -P for current password, default
+                        000000)
   -E, --extended        operate on 0xff size config instead of default 0x40
   -W, --write           write config to Net Locator
   -R, --noread          do not read from Net Locator
-
 ```
+
 ## Internals
 
 Unscrewing the cap gives access to on/off switch (a magnet which acts on a reed relais) and the charging and programming connectors:
@@ -70,9 +76,11 @@ The PCB in all its glory:
 [![pcb back side](images/pcb_back_800px.jpg)](images/pcb_back.jpg)
 
 
-## Manufacturer's PCSW 1.7 software
+## Manufacturer's software
 
 The software is available upon request from the dealer.
+There are two variants (ST_109M_SETTING.exe and RS_10xM_SETTING.exe) which are functionally identical — the RS-10xM version is a rebrand with a different icon and default device name.
+
 It is a Qt application compiled for Windows. I could get it to start with Wine 6.14 on Linux (Linux 5.12.15-arch1-1 x86_64, ArchLinux distribution), but had no chance to get the serial communications running.
 
 ![programming software screenshot](images/pcsw17_screenshot_en.png)
@@ -104,7 +112,10 @@ Original software always reads/writes 0x40 bytes, but there is possibility to ac
 When supplying an "update" command without actually delivering any data, there seems to be a glitch leading to contents from an unknown memory region being stored in config space.
 This can be restored by simply copying default memory contents (0xff length) again.
 
-It looks like the battery voltage is sent as 1/10V in place of the Reference A value.
+Different buoy variants encode battery status differently:
+ * Some buoys send battery voltage as 1/10V in place of the Reference A value.
+ * Some buoys report battery level (%) in the vendor serial number field.
+
 Battery voltage is measured via a voltage divider (43k/56k or 47k/56k - can not measure exactly due to small part size) on PB1 (pin 19) of the STM32F103.
 
 ## Hardware
