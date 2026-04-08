@@ -295,6 +295,11 @@ if __name__ == "__main__":
 
         ser.open()
 
+        # RTS toggle to wake/reset the device (this is usually hard-wired, but we do that here to follow manufacturer specs)
+        ser.rts = False
+        # import time; time.sleep(0.05)
+        ser.rts = True
+
         # try read and timeout seems to make more reliable connection
         ser.read(0xffff)
         ser.timeout = 3
