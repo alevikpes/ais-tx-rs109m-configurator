@@ -266,7 +266,7 @@ if __name__ == "__main__":
     parser.add_argument("-B", "--refb", help="Reference B (distance AIS to stern (m)")
     parser.add_argument("-C", "--refc", help="Reference C (distance AIS to port (m)")
     parser.add_argument("-D", "--refd", help="Reference D (distance AIS to starboard (m)")
-    # password_default = '000000'
+    password_default = '000000'
     parser.add_argument("-P", "--password", help="password to access Net Locator")
     parser.add_argument("-E", "--extended", help="operate on 0xff size config instead of default 0x40", action='store_true')
     # parser.add_argument("-P", "--newpass", help="set new password to access Net Locator")
