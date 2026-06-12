@@ -1,10 +1,15 @@
-#!/usr/bin/env python3
+import argparse
+import re
+
+import serial
+
 
 def fromxbit(ba, x = 6, digitalphaencoding = True):
     if ((x < 1) or (x > 7)):
-        raise ValueError("BitLen must between 1 and 7")
+        raise ValueError('BitLen must between 1 and 7')
+
     if len(ba) < 1:
-        raise ValueError("Must supply non-empty array")
+        raise ValueError('Must supply non-empty array')
 
     n = len(ba) * 8 // x
     b = bytearray([0 for i in range(n)])
@@ -17,15 +22,18 @@ def fromxbit(ba, x = 6, digitalphaencoding = True):
         remaining = shift + x - 8
         if remaining > 0:
             b[i] |= (ba[pos + 1] << (8 -  shift)) & ((1 << x) -1)
+
         if digitalphaencoding and (b[i] & 0x20) != 0x20 and b[i] != 0:
             # not a digit, is alpha
             b[i] = (b[i] & 0x1f) | 0x40
 
     return b
 
+
 def toxbit(ba, x = 6, digitalphaencoding = True):
     if ((x < 1) or (x > 7)):
-        raise ValueError("BitLen must between 1 and 7")
+        raise ValueError('BitLen must between 1 and 7')
+
     if len(ba) < 1:
         return [0xff, 0xff, 0xff, 0xff, 0xff, 0xff]
 
@@ -35,8 +43,10 @@ def toxbit(ba, x = 6, digitalphaencoding = True):
     n = len(ba) * x // 8
     if (len(ba) * x % 8) > 0:
         n += 1
+
     if n == 0:
         n = 1
+
     b = bytearray([0 for i in range(n)])
 
     for i in range(len(ba)):
@@ -47,9 +57,10 @@ def toxbit(ba, x = 6, digitalphaencoding = True):
 
         b[pos] |= (ba[i] << shift) & 0xff
         remaining = shift + x - 8
-        # print(ba[i], " i=", i, " pos=", pos, " shift=", shift, " remaining=", remaining)
+        # print(ba[i], ' i=', i, ' pos=', pos, ' shift=', shift, ' remaining=', remaining)
         if remaining > 0:
             b[pos +1] |= (ba[i] >> (8 - shift))
+
     return b
 
 
@@ -74,10 +85,11 @@ class RS109_config:
     ])
     default_len = 0x40
 
-    def __init__(self, config = []):
-           self.set_config(config)
+    def __init__(self, config=[]):
+           self._config = config
 
-    def get_config(self):
+    @property
+    def config(self):
         return self._config
 
     def set_config(self, config):
@@ -162,7 +174,7 @@ class RS109_config:
     def set_unitmodel(self, unitmodel):
         unitmodel = int(unitmodel)
         if unitmodel < 0 or unitmodel > 15:
-            raise ValueError("UnitModel must be 0 < unitmodel <= 15")
+            raise ValueError('UnitModel must be 0 < unitmodel <= 15')
         self._config[27] = (self._config[27] & 0xf0) | ((int(unitmodel) & 0x0f) << 4)
 
     unitmodel = property(get_unitmodel, set_unitmodel)
@@ -174,7 +186,7 @@ class RS109_config:
     def set_sernum(self, sernum):
         sernum = int(sernum)
         if sernum < 0 or sernum > ((1 << 20) -1):
-            raise ValueError("UnitSernum must be 0 <= sernum <=", ((1 << 20) -1))
+            raise ValueError('UnitSernum must be 0 <= sernum <=', ((1 << 20) -1))
         self._config[25] = sernum & 0xff
         self._config[26] = (sernum >> 8) & 0xff
         self._config[27] = (self._config[27] & 0xf0) | ((sernum>> 16) & 0x0f)
@@ -201,9 +213,9 @@ class RS109_config:
 
     def set_refa(self, a):
         if int(a) > (1<<9):
-            raise ValueError("Reference a must be <= 511")
+            raise ValueError('Reference a must be <= 511')
         if int(a) < 0:
-            raise ValueError("Reference a must be >= 0")
+            raise ValueError('Reference a must be >= 0')
         self._config[39] = (self._config[39] & ((1<<5) -1)) | (((int(a) & ((1<<6) -1)) << 5) & 0xff)
         self._config[38] = (self._config[38] & ~((1<<4) -1)) | ((int(a) & ((1<<9) -1)) >> 3)
 
@@ -214,9 +226,9 @@ class RS109_config:
 
     def set_refb(self, b):
         if int(b) > (1<<9):
-            raise ValueError("Reference b must be <= 511")
+            raise ValueError('Reference b must be <= 511')
         if int(b) < 0:
-            raise ValueError("Reference b must be >= 0")
+            raise ValueError('Reference b must be >= 0')
         self._config[40] = (self._config[40] & ((1<<4) -1)) | (((int(b) & ((1<<6) -1)) << 4) & 0xff)
         self._config[39] = (self._config[39] & ~((1<<5) -1)) | ((int(b) & ((1<<9) -1)) >> 4)
 
@@ -227,9 +239,11 @@ class RS109_config:
 
     def set_refc(self, c):
         if int(c) > (1<<6):
-            raise ValueError("Reference c must be <= 63")
+            raise ValueError('Reference c must be <= 63')
+
         if int(c) < 0:
-            raise ValueError("Reference c must be >= 0")
+            raise ValueError('Reference c must be >= 0')
+
         self._config[41] = (self._config[41] & ((1<<6) -1)) | (((int(c) & ((1<<6) -1)) << 6) & 0xff)
         self._config[40] = (self._config[40] & ~((1<<4) -1)) | ((int(c) & ((1<<6) -1)) >> 2)
 
@@ -240,21 +254,14 @@ class RS109_config:
 
     def set_refd(self, d):
         if int(d) > (1<<6):
-            raise ValueError("Reference d must be <= 63")
+            raise ValueError('Reference d must be <= 63')
         if int(d) < 0:
-            raise ValueError("Reference d must be >= 0")
+            raise ValueError('Reference d must be >= 0')
         self._config[41] = (self._config[41] & ~((1<<6) -1)) | (int(d) & ((1<<6) -1))
 
     refd = property(get_refd, set_refd)
 
-if __name__ == "__main__":
-    import argparse
-    try:
-        import serial
-    except ModuleNotFoundError:
-        print("pyserial is required: pip install pyserial (or better use your package manager for this!)")
-        exit(1)
-    import re
+if __name__ == '__main__':
 
     max_retries = 3
 
@@ -267,30 +274,32 @@ if __name__ == "__main__":
             if r == expected_prefix:
                 if read_extra > 0:
                     return r + ser.read(read_extra)
+
                 return r
+
         return None
 
     parser = argparse.ArgumentParser(description = 'RS-109M Net Locator AIS buoy configurator')
-    parser.add_argument("-d", "--device", help="serial port device (e.g. /dev/ttyUSB0)")
-    parser.add_argument("-m", "--mmsi", help="MMSI")
-    parser.add_argument("-n", "--name", help="ship name")
-    parser.add_argument("-i", "--interval", help="transmit interval in s [30..600]")
-    parser.add_argument("-t", "--type", help="ship type, eg sail=36, pleasure craft=37")
-    parser.add_argument("-c", "--callsign", help="call sign")
-    parser.add_argument("-v", "--vendorid", help="AIS unit vendor id (3 characters)")
-    parser.add_argument("-u", "--unitmodel", help="AIS unit vendor model code")
-    parser.add_argument("-s", "--sernum", help="AIS unit serial num (some buoys report battery level %% here)")
-    parser.add_argument("-A", "--refa", help="Reference A (distance AIS to bow (m); some buoys report battery voltage here)")
-    parser.add_argument("-B", "--refb", help="Reference B (distance AIS to stern (m)")
-    parser.add_argument("-C", "--refc", help="Reference C (distance AIS to port (m)")
-    parser.add_argument("-D", "--refd", help="Reference D (distance AIS to starboard (m)")
+    parser.add_argument('-d', '--device', help='serial port device (e.g. /dev/ttyUSB0)')
+    parser.add_argument('-m', '--mmsi', help='MMSI')
+    parser.add_argument('-n', '--name', help='ship name')
+    parser.add_argument('-i', '--interval', help='transmit interval in s [30..600]')
+    parser.add_argument('-t', '--type', help='ship type, eg sail=36, pleasure craft=37')
+    parser.add_argument('-c', '--callsign', help='call sign')
+    parser.add_argument('-v', '--vendorid', help='AIS unit vendor id (3 characters)')
+    parser.add_argument('-u', '--unitmodel', help='AIS unit vendor model code')
+    parser.add_argument('-s', '--sernum', help='AIS unit serial num (some buoys report battery level %% here)')
+    parser.add_argument('-A', '--refa', help='Reference A (distance AIS to bow (m); some buoys report battery voltage here)')
+    parser.add_argument('-B', '--refb', help='Reference B (distance AIS to stern (m)')
+    parser.add_argument('-C', '--refc', help='Reference C (distance AIS to port (m)')
+    parser.add_argument('-D', '--refd', help='Reference D (distance AIS to starboard (m)')
     password_default = '000000'
-    parser.add_argument("-P", "--password", help="password to access Net Locator")
-    parser.add_argument("--setpass", help="set new password (use -P for current password, default 000000)")
-    parser.add_argument("--clearpass", help="clear password (use -P for current password, default 000000)", action='store_true')
-    parser.add_argument("-E", "--extended", help="operate on 0xff size config instead of default 0x40", action='store_true')
-    parser.add_argument("-W", "--write", help="write config to Net Locator", action='store_true')
-    parser.add_argument("-R", "--noread", help="do not read from Net Locator", action='store_true')
+    parser.add_argument('-P', '--password', help='password to access Net Locator')
+    parser.add_argument('--setpass', help='set new password (use -P for current password, default 000000)')
+    parser.add_argument('--clearpass', help='clear password (use -P for current password, default 000000)', action='store_true')
+    parser.add_argument('-E', '--extended', help='operate on 0xff size config instead of default 0x40', action='store_true')
+    parser.add_argument('-W', '--write', help='write config to Net Locator', action='store_true')
+    parser.add_argument('-R', '--noread', help='do not read from Net Locator', action='store_true')
     args = parser.parse_args()
 
     c = RS109_config()
@@ -329,8 +338,8 @@ if __name__ == "__main__":
         if args.password != None:
             password = args.password
 
-            if not re.match("^[0-9]{0,"+str(password_maxlen)+"}$", password):
-                print("Password: incorrect format, should match [0-9]{0,"+str(password_maxlen)+"}")
+            if not re.match('^[0-9]{0,'+str(password_maxlen)+'}$', password):
+                print('Password: incorrect format, should match [0-9]{0,'+str(password_maxlen)+'}')
                 exit(1)
 
             password_prepared = (password.encode() + password_default.encode())[:password_maxlen]
@@ -343,6 +352,7 @@ if __name__ == "__main__":
         if r is None and args.password != None:
             # zero-length password seems to work even with a password set on some devices
             r = serial_cmd(ser, bytes([0x59, 0x01, 0x42, 0x00]), b'\x95\x20')
+
         if r is None:
             print('Could not initialize with password.')
             exit(1)
@@ -352,27 +362,31 @@ if __name__ == "__main__":
             if r is None:
                 print('Clear password failed.')
                 exit(1)
+
             print('Password cleared successfully!')
             exit(0)
 
         if args.setpass != None:
             newpass = args.setpass
-            if not re.match("^[0-9]{1,"+str(password_maxlen)+"}$", newpass):
-                print("New password: incorrect format, should match [0-9]{1,"+str(password_maxlen)+"}")
+            if not re.match('^[0-9]{1,'+str(password_maxlen)+'}$', newpass):
+                print('New password: incorrect format, should match [0-9]{1,'+str(password_maxlen)+'}')
                 exit(1)
+
             newpass_prepared = (newpass.encode() + password_default.encode())[:password_maxlen]
             r = serial_cmd(ser, bytes([0x59, 0x03, 0x42, password_maxlen]) + password_prepared + newpass_prepared, b'\x95\x20')
             if r is None:
                 print('Set password failed.')
                 exit(1)
+
             print('Password set successfully!')
             exit(0)
 
         if args.noread == False:
             r = serial_cmd(ser, bytes([0x51, num_bytes]), bytes([0x25, num_bytes]), read_extra=num_bytes)
             if r is None or len(r) != 2 + num_bytes:
-                print("Could not read config from device")
+                print('Could not read config from device')
                 exit(1)
+
             c.config = r[2:]
     else:
         print('Operating on default config:')
@@ -433,7 +447,7 @@ if __name__ == "__main__":
         write_cmd = bytes([0x55, num_bytes]) + c.config[:num_bytes]
         r = serial_cmd(ser, write_cmd, bytes([0x75, num_bytes]))
         if r is None:
-            print("Write failed")
+            print('Write failed')
             exit(1)
         else:
             print('Config written successfully!')

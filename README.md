@@ -1,12 +1,13 @@
 # RS-109M AIS Net Locator AIS buoy
 
-This repo is contains a [config tool](rs109m.py) and some info about the [RS-109M](https://opcenter.de/pub/Boot/RS_109M_manual.pdf) Net Locator AIS buoy.
+This repo contains a [config tool](rs109m.py) and some info about the [RS-109M](https://opcenter.de/pub/Boot/RS_109M_manual.pdf) Net Locator AIS buoy.
 
 The device is sold by [Socotran](http://web.archive.org/web/20210806132018/https://socotran.com/products/fishing-net-tracker-locator-gps-marine-ais-netsonde-net-sonde-for-boating-rs-109m) and is also available on Ali\*xpress and e\*ay. In the UK, it is also sold by [East Anglian Radio](http://web.archive.org/web/20210806152420/https://www.eastanglianradio.com/rs-109-ais.html).
 
 [![buoy complete](images/buoy_800px.jpg)](images/buoy.jpg)
 
-Information was gathered by personal observations like photographs of the PCB, and logging of the data stream while configuring.
+Information was gathered by personal observations like photographs of the PCB and logging of the data stream while configuring.
+
 
 ## Attention
 
@@ -16,12 +17,27 @@ Take appropriate measures when trying out things (e.g. shield RF, dummy load).
 
 See [FCC statement](http://web.archive.org/web/20210806152632/https://docs.fcc.gov/public/attachments/DA-18-1211A1_Rcd.pdf) concerning the ban of fishing net buoys that use radio frequencies reserved for marine navigation safety.
 
-## rs109m.py
 
-[rs109m.py](rs109m.py) is a configuration tool written in Python 3.
+## Usage
 
 
+### Connecting to PC
+
+```bash
+[ 3268.873053] usb 1-5: new full-speed USB device number 7 using xhci_hcd
+[ 3268.998090] usb 1-5: New USB device found, idVendor=xxxx, idProduct=xxxx, bcdDevice= x.xx
+[ 3268.998099] usb 1-5: New USB device strings: Mfr=0, Product=2, SerialNumber=0
+[ 3268.998102] usb 1-5: Product: USB Serial
+[ 3269.052589] usbcore: registered new interface driver ch341
+[ 3269.052610] usbserial: USB Serial support registered for ch341-uart
+[ 3269.052626] ch341 1-5:1.0: ch341-uart converter detected
+[ 3269.053115] usb 1-5: ch341-uart converter now attached to ttyUSB0
 ```
+
+### Writing data
+
+[rs109m.py](rs109m.py) is a configuration tool written in Python.
+```bash
 usage: rs109m.py [-h] [-d DEVICE] [-m MMSI] [-n NAME] [-i INTERVAL] [-t TYPE]
                  [-c CALLSIGN] [-v VENDORID] [-u UNITMODEL] [-s SERNUM]
                  [-A REFA] [-B REFB] [-C REFC] [-D REFD] [-P PASSWORD]
@@ -60,6 +76,7 @@ options:
   -W, --write           write config to Net Locator
   -R, --noread          do not read from Net Locator
 ```
+
 
 ## Internals
 
