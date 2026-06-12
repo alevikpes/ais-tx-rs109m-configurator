@@ -1,28 +1,39 @@
 # RS-109M AIS Net Locator AIS buoy
 
-This repo contains a [config tool](rs109m.py) and some info about the [RS-109M](https://opcenter.de/pub/Boot/RS_109M_manual.pdf) Net Locator AIS buoy.
+This repo contains a [config tool](rs109m.py) and some info about the
+[RS-109M](https://opcenter.de/pub/Boot/RS_109M_manual.pdf) Net Locator AIS
+device.
 
-The device is sold by [Socotran](http://web.archive.org/web/20210806132018/https://socotran.com/products/fishing-net-tracker-locator-gps-marine-ais-netsonde-net-sonde-for-boating-rs-109m) and is also available on Ali\*xpress and e\*ay. In the UK, it is also sold by [East Anglian Radio](http://web.archive.org/web/20210806152420/https://www.eastanglianradio.com/rs-109-ais.html).
+The device is sold by
+[Socotran](http://web.archive.org/web/20210806132018/https://socotran.com/products/fishing-net-tracker-locator-gps-marine-ais-netsonde-net-sonde-for-boating-rs-109m)
+and is also available on Ali\*xpress and e\*ay. In the UK, it is also sold by
+[East Anglian Radio](http://web.archive.org/web/20210806152420/https://www.eastanglianradio.com/rs-109-ais.html).
 
 [![buoy complete](images/buoy_800px.jpg)](images/buoy.jpg)
 
-Information was gathered by personal observations like photographs of the PCB and logging of the data stream while configuring.
+Information was gathered by personal observations like photographs of the
+PCB and logging of the data stream while configuring.
 
 
 ## Attention
 
-It is questionable if this device could be operated as a proper ("valid", "legal") AIS device!
+It is questionable if this device could be operated as a proper
+("valid", "legal") AIS device!
 
 Take appropriate measures when trying out things (e.g. shield RF, dummy load).
 
-See [FCC statement](http://web.archive.org/web/20210806152632/https://docs.fcc.gov/public/attachments/DA-18-1211A1_Rcd.pdf) concerning the ban of fishing net buoys that use radio frequencies reserved for marine navigation safety.
+See [FCC statement](http://web.archive.org/web/20210806152632/https://docs.fcc.gov/public/attachments/DA-18-1211A1_Rcd.pdf)
+concerning the ban of fishing net buoys that use radio frequencies reserved
+for marine navigation safety.
 
 
 ## Usage
 
-
 ### Connecting to PC
 
+You will need a special programming cable to connect the device to the PC.
+It is best to buy the device with the cable. Immediately after connecting
+the device, check the `dmesg` output. You must see something like this:
 ```bash
 [ 3268.873053] usb 1-5: new full-speed USB device number 7 using xhci_hcd
 [ 3268.998090] usb 1-5: New USB device found, idVendor=xxxx, idProduct=xxxx, bcdDevice= x.xx
@@ -33,49 +44,18 @@ See [FCC statement](http://web.archive.org/web/20210806152632/https://docs.fcc.g
 [ 3269.052626] ch341 1-5:1.0: ch341-uart converter detected
 [ 3269.053115] usb 1-5: ch341-uart converter now attached to ttyUSB0
 ```
+In this case the device is connected to `/dev/ttyUSB0` port, which would be
+the default for most of the devices.
 
 ### Writing data
 
-[rs109m.py](rs109m.py) is a configuration tool written in Python.
-```bash
-usage: rs109m.py [-h] [-d DEVICE] [-m MMSI] [-n NAME] [-i INTERVAL] [-t TYPE]
-                 [-c CALLSIGN] [-v VENDORID] [-u UNITMODEL] [-s SERNUM]
-                 [-A REFA] [-B REFB] [-C REFC] [-D REFD] [-P PASSWORD]
-                 [--setpass SETPASS] [--clearpass] [-E] [-W] [-R]
+[rs109m.py](rs109m.py) is a configuration tool written in Python. Type
+`python src/rs109m.py -h` to see the help message.
 
-RS-109M Net Locator AIS buoy configurator
+The `device` positional argument is required, the rest are optional.
 
-options:
-  -h, --help            show this help message and exit
-  -d, --device DEVICE   serial port device (e.g. /dev/ttyUSB0)
-  -m, --mmsi MMSI       MMSI
-  -n, --name NAME       ship name
-  -i, --interval INTERVAL
-                        transmit interval in s [30..600]
-  -t, --type TYPE       ship type, eg sail=36, pleasure craft=37
-  -c, --callsign CALLSIGN
-                        call sign
-  -v, --vendorid VENDORID
-                        AIS unit vendor id (3 characters)
-  -u, --unitmodel UNITMODEL
-                        AIS unit vendor model code
-  -s, --sernum SERNUM   AIS unit serial num (some buoys report battery level %
-                        here)
-  -A, --refa REFA       Reference A (distance AIS to bow (m); some buoys
-                        report battery voltage here)
-  -B, --refb REFB       Reference B (distance AIS to stern (m)
-  -C, --refc REFC       Reference C (distance AIS to port (m)
-  -D, --refd REFD       Reference D (distance AIS to starboard (m)
-  -P, --password PASSWORD
-                        password to access Net Locator
-  --setpass SETPASS     set new password (use -P for current password, default
-                        000000)
-  --clearpass           clear password (use -P for current password, default
-                        000000)
-  -E, --extended        operate on 0xff size config instead of default 0x40
-  -W, --write           write config to Net Locator
-  -R, --noread          do not read from Net Locator
-```
+The default mode is reading. In order to write data, the `-W` flag must be
+explicitely specified.
 
 
 ## Internals
@@ -95,55 +75,77 @@ The PCB in all its glory:
 
 ## Manufacturer's software
 
-The software is available upon request from the dealer.
-There are two variants (ST_109M_SETTING.exe and RS_10xM_SETTING.exe) which are functionally identical — the RS-10xM version is a rebrand with a different icon and default device name.
+The software is available upon request from the dealer. There are two
+variants (ST_109M_SETTING.exe and RS_10xM_SETTING.exe) which are
+functionally identical - the RS-10xM version is a rebrand with a different
+icon and default device name.
 
-It is a Qt application compiled for Windows. I could get it to start with Wine 6.14 on Linux (Linux 5.12.15-arch1-1 x86_64, ArchLinux distribution), but had no chance to get the serial communications running.
+It is a Qt application compiled for Windows. I could get it to start with
+Wine 6.14 on Linux (Linux 5.12.15-arch1-1 x86_64, ArchLinux distribution),
+but had no chance to get the serial communications running.
 
 ![programming software screenshot](images/pcsw17_screenshot_en.png)
 
-Using the software on a Windows VM, I was able to produce some [logs](logs/) to get knowledge of the serial protocol.
+Using the software on a Windows VM, I was able to produce some [logs](logs/)
+to get knowledge of the serial protocol.
 
-"Production mode" seems to do nothing more than incrementing MMSI number on subsequent writes.
+"Production mode" seems to do nothing more than incrementing MMSI number
+on subsequent writes.
+
 
 ## Configuration protocol
 
-See [logs dir](logs/) for data I obtained while doing tiny configuration changes.
+See [logs dir](logs/) for data I obtained while doing tiny configuration
+changes.
 
 The protocol is via serial 115200,8n1.
 
-Device expects an init sequence with a password. This password is a weak protection, as it defaults to 000000 and is in the range of 0..999999.
-It seems that the password protection can be bypassed by supplying a zero-length password init sequence.
+Device expects an init sequence with a password. This password is a weak
+protection, as it defaults to 000000 and is in the range of 0..999999.
+It seems that the password protection can be bypassed by supplying a
+zero-length password init sequence.
 
 Initialisation has to take place in the first few seconds after power-up.
 
 After init, you can do 3 things:
- * read config
- * write config
- * set/clear password
+* read config
+* write config
+* set/clear password
 
-Config is done as a whole block of data with some values weirdly stuffed together to save some space.
+Config is done as a whole block of data with some values weirdly stuffed
+together to save some space.
 
-Original software always reads/writes 0x40 bytes, but there is possibility to access 0xff bytes.
+Original software always reads/writes 0x40 bytes, but there is possibility
+to access 0xff bytes.
 
-When supplying an "update" command without actually delivering any data, there seems to be a glitch leading to contents from an unknown memory region being stored in config space.
-This can be restored by simply copying default memory contents (0xff length) again.
+When supplying an "update" command without actually delivering any data,
+there seems to be a glitch leading to the content from an unknown memory
+region being stored in config space. This can be restored by simply
+copying default memory content (0xff length) again.
 
 Different buoy variants encode battery status differently:
- * Some buoys send battery voltage as 1/10V in place of the Reference A value.
- * Some buoys report battery level (%) in the vendor serial number field.
+* Some buoys send battery voltage as 1/10V in place of the Reference A value.
+* Some buoys report battery level (%) in the vendor serial number field.
 
-Battery voltage is measured via a voltage divider (43k/56k or 47k/56k - can not measure exactly due to small part size) on PB1 (pin 19) of the STM32F103.
+Battery voltage is measured via a voltage divider (43k/56k or 47k/56k - can
+not measure exactly due to small part size) on PB1 (pin 19) of the STM32F103.
+
 
 ## Hardware
 
 Buoy is built around Si4463 radio.
 
-Microprocessor matches the layout of ubiquitous STM32F103C8, but as it has no markings, it could as well be a clone or different STM32 ARM µC.
-A SWDIO debug port is available on the PCB (marked G=ground, C=clock, D=swdio, V=VCC), but did not check.
+Microprocessor matches the layout of ubiquitous STM32F103C8, but as it has
+no markings, it could as well be a clone or different STM32 ARM µC. A SWDIO
+debug port is available on the PCB (marked G=ground, C=clock, D=swdio,
+V=VCC), but did not check.
 
-GPS module is ATGM332D with GPS and BDS/BeiDou support, but no GLONASS. It seems to be tied only with its TX pin to an RX pin of the µC.
+GPS module is ATGM332D with GPS and BDS/BeiDou support, but no GLONASS. It
+seems to be tied only with its TX pin to an RX pin of the µC.
 
-[Adrain Studer did also some investigations](https://mobile.twitter.com/AdiStuder/status/1380290819056304130) and posted a [pcb photo](http://web.archive.org/web/20210809180746/https://pbs.twimg.com/media/Ex3FZafUcAIMJLL?format=jpg&name=4096x4096).
+[Adrain Studer did also some investigations](https://mobile.twitter.com/AdiStuder/status/1380290819056304130)
+and posted a
+[pcb photo](http://web.archive.org/web/20210809180746/https://pbs.twimg.com/media/Ex3FZafUcAIMJLL?format=jpg&name=4096x4096).
 
-See [MAIANA AIS project](https://github.com/peterantypas/maiana) for a far more capable Open Source board.
+See [MAIANA AIS project](https://github.com/peterantypas/maiana) for a
+far more capable Open Source board.
