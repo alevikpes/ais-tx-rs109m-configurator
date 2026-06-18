@@ -1,6 +1,6 @@
 # RS-109M AIS Net Locator AIS buoy
 
-This repo contains a [config tool](rs109m.py) and some info about the
+This repo contains a [configuration tool](main.py) and some info about the
 [RS-109M](https://opcenter.de/pub/Boot/RS_109M_manual.pdf) Net Locator AIS
 device.
 
@@ -29,9 +29,9 @@ for marine navigation safety.
 
 ## Usage on Linux
 
-[rs109m.py](rs109m.py) is a configuration tool written in Python. Current
-version is for command line usage only. There is no intention to make a
-GUI version.
+> This project is a configuration tool written in Python. It has been
+tested with `Python v14`. Current version is for command line usage only.
+There is no intention to make a GUI version.
 
 
 ### Connecting to PC
@@ -62,16 +62,20 @@ the default for most of the devices.
 
 If you don't know how to create and use python virtual environments, check
 online tutorials. For this project I recommend using standard `venvs` module
-and external `pip-tools` module. First run:
+and external [`pip-tools`](https://pypi.org/project/pip-tools/) module.
+First run:
 ```bash
 python -m venvs /path/to/virtual/env
 ```
-to create a virtual environment. Then run:
+to create a virtual environment. Usually, it is activated automatically after
+the creation. If not, run:
 ```bash
 source /path/to/virtual/env/bin/activate
 ```
-to activate it. I recommend to upgrade pip, since it is not always the latest
-virsion by default, and install `pip-tools`:
+to activate it.
+
+I recommend to upgrade `pip`, since it is not always the
+latest virsion by default, and install `pip-tools`:
 ```bash
 pip install --upgrade pip pip-tools
 ```
@@ -91,14 +95,29 @@ source /path/to/virtual/env/bin/activate
 ```
 Then run:
 ```bash
-python src/rs109m.py -h` to see the help message.
+python src/main.py -h
 ```
-When reading or writing the data, the `device` positional argument is
+to see the help message.
+
+When reading or writing data, the `device` positional argument is
 required, the rest are optional. You can get it from the `dmesg` command
 as explained earlier in [Connecting to PC](#connecting-to-pc).
 
-The default mode is reading. In order to write data, the `-W` flag must be
-explicitely specified.
+The default mode is reading. Just run:
+```bash
+python src/main.py '/dev/ttyUSB0'  # Use the correct device in the quotes.
+```
+You may need to check this output to see how your device stores the battery
+level (it may vary on different devices).
+
+In order to write data, the `-W` flag must be explicitely specified:
+```bash
+python src/main.py '/dev/ttyUSB0' \
+    -m <MMSI> \
+    -n <SHIP NAME> \
+    ... \
+    -W
+```
 
 
 ## Internals
