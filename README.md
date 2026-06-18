@@ -29,8 +29,9 @@ for marine navigation safety.
 
 ## Usage on Linux
 
-Current version is for command line usage only. There is no intention to
-make a GUI version.
+[rs109m.py](rs109m.py) is a configuration tool written in Python. Current
+version is for command line usage only. There is no intention to make a
+GUI version.
 
 
 ### Connecting to PC
@@ -60,7 +61,7 @@ the default for most of the devices.
 ##### Create a virtual environment
 
 If you don't know how to create and use python virtual environments, check
-online tutorials. For this project I recommend using built-in `venvs` module
+online tutorials. For this project I recommend using standard `venvs` module
 and external `pip-tools` module. First run:
 ```bash
 python -m venvs /path/to/virtual/env
@@ -78,13 +79,23 @@ Lastly, run:
 ```bash
 pip-compile && pip-sync
 ```
-to create a dependency file and to install all the dependencies.
+to create a dependencies file `requirements.txt` and to install all the
+dependencies.
 
+##### Execution
 
-[rs109m.py](rs109m.py) is a configuration tool written in Python. Type
-`python src/rs109m.py -h` to see the help message.
-
-The `device` positional argument is required, the rest are optional.
+Every time you want to run the script, you need to activate the virtual
+environment, which was created in the previous chapter:
+```bash
+source /path/to/virtual/env/bin/activate
+```
+Then run:
+```bash
+python src/rs109m.py -h` to see the help message.
+```
+When reading or writing the data, the `device` positional argument is
+required, the rest are optional. You can get it from the `dmesg` command
+as explained earlier in [Connecting to PC](#connecting-to-pc).
 
 The default mode is reading. In order to write data, the `-W` flag must be
 explicitely specified.
