@@ -1,4 +1,7 @@
-# RS-109M AIS Net Locator AIS buoy
+# RS-109M AIS Net Locator buoy
+
+> **DISCLAMER** This is a research project and I am not responsible for
+anything. Use it at your own risk.
 
 This repo contains a [configuration tool](main.py) and some info about the
 [RS-109M](https://opcenter.de/pub/Boot/RS_109M_manual.pdf) Net Locator AIS
@@ -15,12 +18,10 @@ Information was gathered by personal observations like photographs of the
 PCB and logging of the data stream while configuring.
 
 
-## Attention
+## Warning for the USA users
 
-It is questionable if this device could be operated as a proper
-("valid", "legal") AIS device!
-
-Take appropriate measures when trying out things (e.g. shield RF, dummy load).
+One of your "Commissions" decided to forbid the use of such devices. Take
+appropriate measures when trying things out (e.g. shield RF, dummy load).
 
 See [FCC statement](http://web.archive.org/web/20210806152632/https://docs.fcc.gov/public/attachments/DA-18-1211A1_Rcd.pdf)
 concerning the ban of fishing net buoys that use radio frequencies reserved
@@ -30,7 +31,7 @@ for marine navigation safety.
 ## Usage on Linux
 
 > This project is a configuration tool written in Python. It has been
-tested with `Python v14`. Current version is for command line usage only.
+tested with `Python14`. Current version is for command line usage only.
 There is no intention to make a GUI version.
 
 
