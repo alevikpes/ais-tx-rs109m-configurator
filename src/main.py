@@ -33,10 +33,10 @@ def cli_parser():
         '--vendor-id',
         help='AIS unit vendor id (3 characters).',
     )
-    parser.add_argument('-u', '--unitmodel', help='AIS unit vendor model code')
+    parser.add_argument('-u', '--unit-model', help='AIS unit vendor model code')
     parser.add_argument(
         '-s',
-        '--sernum',
+        '--ser-num',
         help=(
             'AIS unit serial num '
             '(some devices report battery level %% here).'
@@ -100,274 +100,203 @@ def cli_parser():
     return parser.parse_args()
 
 
-class Configurator:
-    default_len = 0x40
+def serial_cmd(ser, tx_bytes, expected_prefix, read_extra=0, max_retries = 3):
+    print(f'Writing data: {tx_bytes.decode('ascii', errors='ignore').strip()}')
+    # Send command and check response, with retries. Returns full response bytes.
+    for attempt in range(max_retries):
+        ser.reset_input_buffer()
+        ser.write(tx_bytes)
+        r = ser.read(len(expected_prefix))
+        print(f'Expected prefix: {r.decode('ascii', errors='ignore').strip()}')
+        if len(r) == len(expected_prefix) and r == expected_prefix:
+            if read_extra > 0:
+                re = ser.read(read_extra)
+                print(f'Read extra: {re.decode('ascii', errors='ignore').strip()}')
+                return r + re
 
-    def __init__(self, config):
-           #self._config = config if config else self.default_config
-           self._config = config
+            return r
 
-    def __repr__(self):
-        return '[ 0x' + self._config.hex('#').replace('#',', 0x') + ' ]'
+    return None
 
-    @property
-    def config(self):
-        return self._config
 
-    @config.setter
-    def config(self, val):
-        # TODO: implement differently, as setting config as slices config[34:38] might be convenient
-        #clen = 0xff if (len(val) > 0xff) else len(val)
-        #self._config = bytearray(val[0:clen] + self.default_config[clen:])
-        self._config = bytearray(val) + bytearray(0x40-len(val))
+class Field:
+    """Abstract class for fields."""
 
-    @property
-    def mmsi(self):
-        return (
-            self._config[1] + 
-            (self._config[2] << 8) + 
-            (self._config[3] << 16) + 
-            ((self._config[4] & 0xff) << 24)
+    def __init__(self, offset, length):
+        self.offset = offset
+        self.length = length
+
+    def read(self, config):
+        raise NotImplementedError
+
+    def write(self, config, value):
+        raise NotImplementedError
+
+
+class UIntField(Field):
+    """Unsigned little-endian integer."""
+
+    def read(self, config):
+        return int.from_bytes(
+            config[self.offset:self.offset+self.length],
+            byteorder='little'
         )
 
-    @mmsi.setter
-    def mmsi(self, val):
-        mmsi = int(val)
-        self._config[1] = mmsi & 0xff
-        self._config[2] = (mmsi >> 8) & 0xff
-        self._config[3] = (mmsi >> 16) & 0xff
-        self._config[4] = (mmsi >> 24) & 0xff
+    def write(self, config, value):
+        config[self.offset:self.offset+self.length] = (
+            int(value).to_bytes(self.length, 'little')
+        )
 
-    @property
-    def ship_name(self):
-        return bytes(self._config[5:25]).decode('ascii').strip()
 
-    @ship_name.setter
-    def ship_name(self, val):
-        # TODO: check for invalid chars, this one is incomplete
-        safe_name = val.encode('ascii', 'ignore').decode().upper().ljust(20, ' ').encode('ascii')
-        self._config[5:25] = safe_name
+class AsciiField(Field):
+    """Fixed length ASCII string."""
 
-    @property
-    def interval(self):
-        """Transmitting interval."""
-        return self._config[0] * 30
+    def read(self, config):
+        return bytes(
+            config[self.offset:self.offset+self.length]
+        ).decode('ascii', errors='ignore').rstrip()
 
-    @interval.setter
-    def interval(self, val):
-        seconds = int(val)
-        if seconds > 600:
-            seconds = 600
-        elif seconds < 30:
-            seconds = 30
+    def write(self, config, value):
+        data = value.encode('ascii', errors='ignore')
+        config[self.offset:self.offset+self.length] = (
+            data[:self.length].ljust(self.length, b' ')
+        )
 
-        self._config[0] = seconds // 30
 
-    @property
-    def ship_type(self):
-        """Ship type."""
-        return int(self._config[31])
+class Ais6BitField(Field):
+    """AIS 6-bit encoded string."""
 
-    @ship_type.setter
-    def ship_type(self, val):
-        self._config[31] = int(val) & 0xff
-
-    @property
-    def vendor_id(self):
-        vid = [
-            (self._config[29] >> 4) | ((self._config[30]  & 0x03) << 4) | 0x40,
-            (self._config[28] >> 6) | ((self._config[29] & 0x07) << 2) | 0x40,
-            (self._config[28] & 0x3f) | 0x40
-        ]
-        return  ''.join(c if c.isalnum() else '' for c in bytes(vid).decode())
-
-    @vendor_id.setter
-    def vendor_id(self, val):
-        # TODO: check for invalid chars, this one is incomplete
-        safe_vid = val.encode('ascii', 'ignore').decode().upper().ljust(3, '\x00')[:3].encode('ascii')
-        print(safe_vid)
-        self._config[28] = (safe_vid[2] & 0x3f) | ((safe_vid[1] << 6 ) & 0xff)
-        self._config[29] = ((safe_vid[1] >> 2) & 0x0f) | ((safe_vid[0] << 4) & 0xff)
-        self._config[30] = (self._config[30] & ~0x0f) | ((safe_vid[0] & 0x3f) >> 4)
-
-    def get_unitmodel(self):
-        unitmodel = self._config[27] >> 4
-        return unitmodel
-
-    def set_unitmodel(self, unitmodel):
-        unitmodel = int(unitmodel)
-        if unitmodel < 0 or unitmodel > 15:
-            raise ValueError('UnitModel must be 0 < unitmodel <= 15')
-        self._config[27] = (self._config[27] & 0xf0) | ((int(unitmodel) & 0x0f) << 4)
-
-    unitmodel = property(get_unitmodel, set_unitmodel)
-
-    def get_sernum(self):
-        sernum = self._config[25] + (self._config[26] << 8) + ((self._config[27] & 0x0f) << 16)
-        return sernum
-
-    def set_sernum(self, sernum):
-        sernum = int(sernum)
-        if sernum < 0 or sernum > ((1 << 20) - 1):
-            raise ValueError('UnitSernum must be 0 <= sernum <= ', ((1 << 20) - 1))
-
-        self._config[25] = sernum & 0xff
-        self._config[26] = (sernum >> 8) & 0xff
-        self._config[27] = (self._config[27] & 0xf0) | ((sernum >> 16) & 0x0f)
-
-    sernum = property(get_sernum, set_sernum)
-
-    def _fromxbit(ba, x=6, digitalphaencoding=True):
-        if ((x < 1) or (x > 7)):
-            raise ValueError('BitLen must be between 1 and 7')
-
-        if len(ba) < 1:
-            raise ValueError('Must supply non-empty array')
-
+    def _fromxbit(self, ba, x=6):
         n = len(ba) * 8 // x
-        b = bytearray([0 for i in range(n)])
-
+        result = bytearray()
         for i in range(n):
             pos = i * x // 8
             shift = i * x % 8
+            val = (ba[pos] >> shift) & ((1 << x)-1)
+            if shift + x > 8:
+                val |= (ba[pos+1] << (8-shift)) & ((1 << x)-1)
 
-            b[i] = (ba[pos] >> shift) & ((1 << x) - 1)
-            remaining = shift + x - 8
-            if remaining > 0:
-                b[i] |= (ba[pos + 1] << (8 -  shift)) & ((1 << x) - 1)
+            if val != 0 and not (val & 0x20):
+                val |= 0x40
 
-            if digitalphaencoding and (b[i] & 0x20) != 0x20 and b[i] != 0:
-                # not a digit, is alpha
-                b[i] = (b[i] & 0x1f) | 0x40
+            result.append(val)
 
-        return b
+        return result
 
-    @property
-    def call_sign(self):
-        # TODO: check if it is 32:37 or 32:38
-        # derek@conniffe.com - changed to 32:38 to
-        # support valid 7 digit callsigns
-        s = self._fromxbit(self._config[32:38], 6).decode('ascii')[::-1]
-        return ''.join(c if c.isalnum() else '' for c in s)
+    def _toxbit(self, data, x=6):
+        data = bytearray(
+            data.encode('ascii', errors='ignore')
+            .upper()
+        )
+        size = (len(data)*x + 7)//8
+        result = bytearray(size)
+        for i, value in enumerate(data):
+            value &= (1 << x)-1
+            pos = i*x//8
+            shift = i*x%8
+            result[pos] |= value << shift
+            if shift+x > 8:
+                result[pos+1] |= value >> (8-shift)
 
-    def _toxbit(ba, x=6, digitalphaencoding=True):
-        if ((x < 1) or (x > 7)):
-            raise ValueError('BitLen must be between 1 and 7')
+        return result
 
-        if len(ba) < 1:
-            return [0xff, 0xff, 0xff, 0xff, 0xff, 0xff]
+    def read(self, config):
+        raw = config[self.offset:self.offset+self.length]
+        return self._fromxbit(raw).decode('ascii').rstrip()
 
-        if digitalphaencoding:
-           ba = bytearray(ba.encode('ascii', 'ignore').decode().upper().encode('ascii'))
+    def write(self, config, value):
+        encoded = self._toxbit(value)
+        config[self.offset:self.offset+self.length] = (
+            encoded.ljust(self.length, b'\x00')
+        )
 
-        n = len(ba) * x // 8
-        if (len(ba) * x % 8) > 0:
-            n += 1
 
-        if n == 0:
-            n = 1
+class VendorIdField(Field):
+    """AIS 3 character vendor ID."""
 
-        b = bytearray([0 for i in range(n)])
+    def read(self, config):
+        b0 = config[28]
+        b1 = config[29]
+        b2 = config[30]
+        chars = [
+            (b0 >> 4) | ((b1 & 0x03) << 4),
+            (b1 >> 2) | ((b2 & 0x0f) << 6),
+            b2 & 0x3f,
+        ]
+        return ''.join(chr(c + 0x40) for c in chars)
 
-        for i in range(len(ba)):
-            pos = i * x // 8
-            shift = i * x % 8
+    def write(self, config, value):
+        value = value.upper().ljust(3)[:3]
+        data = [ord(c) - 0x40 for c in value]
+        config[28] = data[2] | ((data[1] & 0x03) << 6)
+        config[29] = ((data[1] >> 2) & 0x0f) | (data[0] << 4)
+        config[30] = config[30] & 0xf0 | ((data[0] >> 4) & 0x0f)
 
-            ba[i] = ba[i] & ((1 << x) - 1)
 
-            b[pos] |= (ba[i] << shift) & 0xff
-            remaining = shift + x - 8
-            # print(ba[i], ' i=', i, ' pos=', pos, ' shift=', shift, ' remaining=', remaining)
-            if remaining > 0:
-                b[pos+1] |= (ba[i] >> (8 - shift))
+class PackedBitsField(Field):
+    """Generic bit-field."""
 
-        return b
+    def __init__(self, offset, shift, bits):
+        super().__init__(offset, 1)
+        self.shift = shift
+        self.mask = (1 << bits)-1
 
-    @call_sign.setter
-    def call_sign(self, cs):
-        safe_cs = ''.join(c if c.isalnum() else '' for c in cs)
-        # derek@conniffe.com - changed to 32:38 to
-        # support valid 7 digit callsigns
-        self._config[32:38] = self._toxbit(safe_cs[::-1])
+    def read(self, config):
+        return (config[self.offset] >> self.shift) & self.mask
 
-    def get_refa(self):
-        return (self._config[39] >> 5) | ((self._config[38] & ((1 << 6) - 1)) << 3)
+    def write(self, config, value):
+        config[self.offset] &= ~(self.mask << self.shift)
 
-    def set_refa(self, a):
-        if int(a) > (1 << 9):
-            raise ValueError('Reference a must be <= 511')
-        if int(a) < 0:
-            raise ValueError('Reference a must be >= 0')
-        self._config[39] = (self._config[39] & ((1 << 5) - 1)) | (((int(a) & ((1 << 6) - 1)) << 5) & 0xff)
-        self._config[38] = (self._config[38] & ~((1 << 4) - 1)) | ((int(a) & ((1<<9) - 1)) >> 3)
+        config[self.offset] |= (int(value) & self.mask) << self.shift
 
-    refa = property(get_refa, set_refa)
 
-    def get_refb(self):
-        return (self._config[40] >> 4) | ((self._config[39] & ((1<<5) -1)) << 4)
+FIELDS = {
+    'interval': UIntField(0, 1),
+    'mmsi': UIntField(1, 4),
+    'ship_name': AsciiField(5, 20),
+    'sernum': UIntField(25, 3),
+    'unitmodel': PackedBitsField(27, 4, 4),
+    'vendor_id': VendorIdField(28, 3),
+    'ship_type': UIntField(31, 1),
+    'call_sign': Ais6BitField(32, 6),
+}
 
-    def set_refb(self, b):
-        if int(b) > (1<<9):
-            raise ValueError('Reference b must be <= 511')
-        if int(b) < 0:
-            raise ValueError('Reference b must be >= 0')
-        self._config[40] = (self._config[40] & ((1<<4) -1)) | (((int(b) & ((1<<6) -1)) << 4) & 0xff)
-        self._config[39] = (self._config[39] & ~((1<<5) -1)) | ((int(b) & ((1<<9) -1)) >> 4)
 
-    refb = property(get_refb, set_refb)
+class Configurator:
 
-    def get_refc(self):
-        return (self._config[41] >> 6) | ((self._config[40] & ((1<<4) -1)) << 2)
+    """Configurator.
 
-    def set_refc(self, c):
-        if int(c) > (1<<6):
-            raise ValueError('Reference c must be <= 63')
+    Parameter  | Offset                         | Length (bytes)
+    ----------------------------------------------------------
+    interval   | 0                              | 1
+    mmsi       | 1–4                            | 4
+    ship_name  | 5–24                           | 20
+    ser_num    | 25–27 (packed with unitmodel)  | 3
+    unit_model | upper nibble of byte 27        | 0.5
+    vendor_id  | 28–30 (packed)                 | 3
+    ship_type  | 31                             | 1
+    call_sign  | 32–37                          | 6
+    refa       | 38–39 (packed)                 | 2
+    refb       | 39–40 (packed)                 | 2
+    refc       | 40–41 (packed)                 | 2
+    refd       | 41                             | 1
+    """
 
-        if int(c) < 0:
-            raise ValueError('Reference c must be >= 0')
+    def __init__(self):
+        self._config = bytearray(0x40)
 
-        self._config[41] = (self._config[41] & ((1<<6) -1)) | (((int(c) & ((1<<6) -1)) << 6) & 0xff)
-        self._config[40] = (self._config[40] & ~((1<<4) -1)) | ((int(c) & ((1<<6) -1)) >> 2)
+    def get(self, name):
+        return FIELDS[name].read(self._config)
 
-    refc = property(get_refc, set_refc)
+    def set(self, name, value):
+        FIELDS[name].write(self._config, value)
 
-    def get_refd(self):
-        return self._config[41] & ((1<<6) -1)
-
-    def set_refd(self, d):
-        if int(d) > (1<<6):
-            raise ValueError('Reference d must be <= 63')
-        if int(d) < 0:
-            raise ValueError('Reference d must be >= 0')
-        self._config[41] = (self._config[41] & ~((1<<6) -1)) | (int(d) & ((1<<6) -1))
-
-    refd = property(get_refd, set_refd)
 
 if __name__ == '__main__':
 
-    max_retries = 3
-
-    def serial_cmd(ser, tx_bytes, expected_prefix, read_extra=0):
-        print(f'Writing data: {tx_bytes.decode("ascii", errors="ignore").strip()}')
-        # Send command and check response, with retries. Returns full response bytes.
-        for attempt in range(max_retries):
-            ser.reset_input_buffer()
-            ser.write(tx_bytes)
-            r = ser.read(len(expected_prefix))
-            print(f'Expected prefix: {r.decode("ascii", errors="ignore").strip()}')
-            if r == expected_prefix:
-                if read_extra > 0:
-                    re = ser.read(read_extra)
-                    print(f'Read extra: {re.decode("ascii", errors="ignore").strip()}')
-                    return r + re
-
-                return r
-
-        return None
-
     args = cli_parser()
 
-    c = Configurator()
+    c = Configurator(args)
 
     num_bytes = c.default_len
     if args.extended:
@@ -375,41 +304,55 @@ if __name__ == '__main__':
 
     ser = None
 
-    if args.device != None:
-        ser = serial.Serial()
-        ser.port = args.device
+    with serial.Serial(
+        '/dev/ttyUSB0',
+        baudrate=115200,
+        bytesize=serial.EIGHTBITS,
+        parity=serial.PARITY_NONE,
+        stopbits=serial.STOPBITS_ONE,
+        timeout=1,
+        write_timeout=3,
+    ) as ser:
+    #if args.device != None:
+    #    ser = serial.Serial()
+    #    ser.port = args.device
 
-        ser.baudrate = 115200
-        ser.bytesize = serial.EIGHTBITS
-        ser.parity = serial.PARITY_NONE
-        ser.stopbits = serial.STOPBITS_ONE
+    #    ser.baudrate = 115200
+    #    ser.bytesize = serial.EIGHTBITS
+    #    ser.parity = serial.PARITY_NONE
+    #    ser.stopbits = serial.STOPBITS_ONE
 
-        ser.timeout = 1
-        ser.write_timeout = 3
+    #    ser.timeout = 1
+    #    ser.write_timeout = 3
 
-        ser.open()
+    #    ser.open()
 
-        # RTS toggle to wake/reset the device (this is usually hard-wired, but we do that here to follow manufacturer specs)
+        # RTS toggle to wake/reset the device (this is usually hard-wired,
+        # but we do that here to follow manufacturer specs)
         ser.rts = False
         # import time; time.sleep(0.05)
         ser.rts = True
 
         # try read and timeout seems to make more reliable connection
         ser.read(0xffff)
-        ser.timeout = 3
+        #ser.timeout = 3
 
         password_maxlen = 6
         password_prepared = PASSWORD_DEFAULT.encode()[:password_maxlen]
 
         if args.password != None:
             password = args.password
-
             if not re.match('^[0-9]{0,'+str(password_maxlen)+'}$', password):
                 print('Password: incorrect format, should match [0-9]{0,'+str(password_maxlen)+'}')
                 exit(1)
 
-            password_prepared = (password.encode() + PASSWORD_DEFAULT.encode())[:password_maxlen]
-            auth_cmd = bytes([0x59, 0x01, 0x42, password_maxlen]) + password_prepared
+            password_prepared = (
+                password.encode() + PASSWORD_DEFAULT.encode()
+            )[:password_maxlen]
+            auth_cmd = (
+                bytes([0x59, 0x01, 0x42, password_maxlen]) +
+                password_prepared
+            )
         else:
             # This seems to work even with a password set
             auth_cmd = bytes([0x59, 0x01, 0x42, 0x00])
@@ -476,11 +419,11 @@ if __name__ == '__main__':
     if args.vendor_id!= None:
         c.vendor_id = args.vendor_id
 
-    if args.unitmodel != None:
-        c.unitmodel = args.unitmodel
+    if args.unit_model != None:
+        c.unit_model = args.unit_model
 
-    if args.sernum!= None:
-        c.sernum= args.sernum
+    if args.ser_num!= None:
+        c.ser_num= args.ser_num
 
     if args.refa != None:
         c.refa = int(args.refa)
@@ -494,14 +437,14 @@ if __name__ == '__main__':
     if args.refd != None:
         c.refd = int(args.refd)
 
-    print(f'\tMMSI: {"mmsi": c.mmsi}')
+    print(f'\tMMSI: {c.mmsi}')
     print(f'\tShip name: {c.ship_name}')
     print(f'\tTX interval (s): {c.interval}')
     print(f'\tShip type: {c.ship_type}')
     print(f'\tCallsign: {c.call_sign}')
     print(f'\tVendorID: {c.vendor_id}')
-    print(f'\tUnitModel: {c.unitmodel}')
-    print(f'\tUnitSerial: {c.sernum} (may be battery level {c.sernum}% on some devices)')
+    print(f'\tUnitModel: {c.unit_model}')
+    print(f'\tUnitSerial: {c.ser_num} (may be battery level {c.ser_num}% on some devices)')
     print(f'\tReference point A (m): {c.refa} (may be battery voltage {(c.refa/10.0):.1f}V on some devices)')
     print(f'\tReference point B (m): {c.refb}')
     print(f'\tReference point C (m): {c.refc}')

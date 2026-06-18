@@ -35,45 +35,11 @@ with serial.Serial(
 ) as ser:
     # --- wake up device ---
     ser.rts = False
-    #time.sleep(0.05)
     ser.rts = True
-    #time.sleep(0.2)
     ser.read(0xffff)
-    #ser.timeout = 3
-
-    # --- AUTH ---
-    #password = b'000000'
-    #password = 0x00
-    #auth_cmd = bytes([0x59, 0x01, 0x42, len(password)]) + password
-
-    #r = serial_cmd(ser, auth_cmd, b'\x95\x20')
-
-    #ser.reset_input_buffer()
-    #ser.write(auth_cmd)
-    #time.sleep(0.1)
-    #ack = ser.read(2)
-    #print("AUTH ACK:", ack.hex())
-
-    #ser.reset_input_buffer()
-    #ser.write(bytes([0x59, 0x01, 0x42, 0x00]))
-    #ack = ser.read(2)
-    #print("AUTH ACK:", ack.hex())
-    #if ack != b"\x95\x20":
-    #    raise RuntimeError("Auth failed")
-
-    ## --- READ CONFIG ---
-    #ser.reset_input_buffer()
-    #ser.write(bytes([0x51, 0x40]))
-    #header = ser.read(2)
-    #print("HEADER:", header.hex())
-    #data = ser.read(0x40)
-    #print("DATA LENGTH:", len(data))
-    #print("DATA:", data.hex())
 
     # Send handshake
     ser.write(bytes.fromhex('59 01 42 06 30 30 30 30 30 30'))
-    #ser.flush()
-
     handshake = ser.read(32)
     print(f'Handshake response [HEX]: {handshake.hex()}')
     print(
