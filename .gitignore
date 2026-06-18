@@ -1,0 +1,5 @@
+*.py[co]
+*.sw[op]
+requirements.txt
+
+**/__pycache__/

@@ -27,13 +27,20 @@ concerning the ban of fishing net buoys that use radio frequencies reserved
 for marine navigation safety.
 
 
-## Usage
+## Usage on Linux
+
+Current version is for command line usage only. There is no intention to
+make a GUI version.
+
 
 ### Connecting to PC
 
 You will need a special programming cable to connect the device to the PC.
-It is best to buy the device with the cable. Immediately after connecting
-the device, check the `dmesg` output. You must see something like this:
+It is a standard FTDI USB adapter connected to the compatible plug, so if you
+are into electronics and you have the corresponding components, you may try
+to make this connection yourself. If not, it is best to buy the device
+with the cable. Immediately after connecting the device, check the
+`dmesg` output. You must see something like this:
 ```bash
 [ 3268.873053] usb 1-5: new full-speed USB device number 7 using xhci_hcd
 [ 3268.998090] usb 1-5: New USB device found, idVendor=xxxx, idProduct=xxxx, bcdDevice= x.xx
@@ -47,7 +54,32 @@ the device, check the `dmesg` output. You must see something like this:
 In this case the device is connected to `/dev/ttyUSB0` port, which would be
 the default for most of the devices.
 
+
 ### Writing data
+
+##### Create a virtual environment
+
+If you don't know how to create and use python virtual environments, check
+online tutorials. For this project I recommend using built-in `venvs` module
+and external `pip-tools` module. First run:
+```bash
+python -m venvs /path/to/virtual/env
+```
+to create a virtual environment. Then run:
+```bash
+source /path/to/virtual/env/bin/activate
+```
+to activate it. I recommend to upgrade pip, since it is not always the latest
+virsion by default, and install `pip-tools`:
+```bash
+pip install --upgrade pip pip-tools
+```
+Lastly, run:
+```bash
+pip-compile && pip-sync
+```
+to create a dependency file and to install all the dependencies.
+
 
 [rs109m.py](rs109m.py) is a configuration tool written in Python. Type
 `python src/rs109m.py -h` to see the help message.
@@ -60,7 +92,8 @@ explicitely specified.
 
 ## Internals
 
-Unscrewing the cap gives access to on/off switch (a magnet which acts on a reed relais) and the charging and programming connectors:
+Unscrewing the cap gives access to on/off switch (a magnet which acts
+on a reed relais) and the charging and programming connectors:
 
 [![buoy connectors](images/buoy_connectors_800px.jpg)](images/buoy_connectors.jpg)
 
@@ -73,7 +106,7 @@ The PCB in all its glory:
 [![pcb back side](images/pcb_back_800px.jpg)](images/pcb_back.jpg)
 
 
-## Manufacturer's software
+## Manufacturer's software for Windows
 
 The software is available upon request from the dealer. There are two
 variants (ST_109M_SETTING.exe and RS_10xM_SETTING.exe) which are
