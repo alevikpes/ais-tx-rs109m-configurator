@@ -1,7 +1,5 @@
-"""Memory map."""
+"""Memory map.
 
-
-"""
 Parameter  | Offset                         | Length (bytes)    | Comments
 ----------------------------------------------------------
 interval   | 0                              | 1
@@ -19,6 +17,16 @@ ais2star   | 41                             | 1                 | distance AIS t
 """
 
 
+from src.fields import (
+    UIntField,
+    AsciiField,
+    Ais6BitField,
+    VendorIdField,
+    PackedBitsField,
+    AISReferenceField,
+)
+
+
 MEMORY_MAP = [
     ('interval', 0, 1, 'uint'),
     ('mmsi', 1, 4, 'uint'),
@@ -30,20 +38,26 @@ MEMORY_MAP = [
     ('call_sign', 32, 6, 'ais6bit'),
     ('ais_ref', 38, 4, 'ais_ref'),  # packed bitfield block
 ]
+FIELD_TYPES = {
+    'uint': UIntField,
+    'ascii': AsciiField,
+    'ais6bit': Ais6BitField,
+    'vendor_id': VendorIdField,
+    'packed_bits': PackedBitsField,
+    'ais_ref': AISReferenceField,
+}
 
 
-#def field_factory(name, offset, length):
-#    if name == 'ais_ref':
-#        return AISReferenceField(offset, length)
-#
-#    if name == 'ship_name':
-#        return AsciiField(offset, length)
-#
-#    if name == 'call_sign':
-#        return Ais6BitField(offset, length)
-#
-#    if name == 'vendor_id':
-#        return VendorIdField(offset, length)
-#
-#    # default
-#    return UIntField(offset, length)
+def build_fields():
+    fields = {}
+
+    for name, offset, length, ftype in MEMORY_MAP:
+        cls = FIELD_TYPES[ftype]
+
+        # special constructor handling
+        if ftype == 'packed_bits':
+            fields[name] = cls(offset, 4, 4)
+        else:
+            fields[name] = cls(offset, length)
+
+    return fields

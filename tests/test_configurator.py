@@ -1,7 +1,5 @@
 import pytest
 
-from src.main import Configurator
-
 
 class TestConfigurator:
 

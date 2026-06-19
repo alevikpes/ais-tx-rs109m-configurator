@@ -2,53 +2,19 @@ import re
 
 import serial
 
-import src.fields as fields_classes
 from src.args_parser import cli_parser
 from src.field_builder import build_fields
-from src.memory_map import MEMORY_MAP
 
 
 PASSWORD_DEFAULT = '000000'
-#FIELDS = {
-#    'interval': fields_classes.UIntField(0, 1),
-#    'mmsi': fields_classes.UIntField(1, 4),
-#    'ship_name': fields_classes.AsciiField(5, 20),
-#    'ser_num': fields_classes.UIntField(25, 3),
-#    'unit_model': fields_classes.PackedBitsField(27, 4, 4),
-#    'vendor_id': fields_classes.VendorIdField(28, 3),
-#    'ship_type': fields_classes.UIntField(31, 1),
-#    'call_sign': fields_classes.Ais6BitField(32, 6),
-#    'ais2bow': ,
-#    'ais2stern': ,
-#    'ais2port': ,
-#    'ais2star': ,
-#    #'ais_ref': fields.AISReferenceField(38, 4),
-#}
 
 
 class Configurator:
-
-    """Configurator.
-
-    Parameter  | Offset                         | Length (bytes)    | Comments
-    ----------------------------------------------------------
-    interval   | 0                              | 1
-    mmsi       | 1–4                            | 4
-    ship_name  | 5–24                           | 20
-    ser_num    | 25–27 (packed with unit_model) | 3                 | some buoys report battery charge level here
-    unit_model | upper nibble of byte 27        | 0.5
-    vendor_id  | 28–30 (packed)                 | 3
-    ship_type  | 31                             | 1
-    call_sign  | 32–37                          | 6
-    ais2bow    | 38–39 (packed)                 | 2                 | distance AIS to bow (m); some buoys report battery voltage here
-    ais2stern  | 39–40 (packed)                 | 2                 | distance AIS to stern (m)
-    ais2port   | 40–41 (packed)                 | 2                 | distance AIS to port (m)
-    ais2star   | 41                             | 1                 | distance AIS to starboard (m)
-    """
+    """Configurator."""
 
     def __init__(self):
         self._config = bytearray(0x40)
-        self.fields = build_fields(MEMORY_MAP)
+        self.fields = build_fields()
 
     def get(self, name):
         field = self.fields.get(name)
