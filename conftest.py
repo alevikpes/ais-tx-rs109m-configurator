@@ -1,15 +1,26 @@
 import pytest
 
-from src.configurator import Configurator
+from src.config_schema import Configurator, build_fields
+from src.fields import VendorIdField
 
 
 @pytest.fixture
-def config():
+def configurator():
     """
     Returns a fresh Configurator with default device state.
     Each test gets an isolated instance.
     """
     return Configurator()
+
+
+@pytest.fixture
+def fields():
+    return build_fields()
+
+
+@pytest.fixture
+def vendor_id_field():
+    return VendorIdField(28, 3)
 
 
 @pytest.fixture
@@ -39,8 +50,3 @@ def raw_config():
     Returns raw bytearray for low-level validation tests.
     """
     return bytearray(0x40)
-
-
-@pytest.fixture
-def config_with_map():
-    return Configurator(memory_map=MEMORY_MAP)

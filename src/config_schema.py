@@ -17,6 +17,8 @@ ais2star   | 41                             | 1                 | distance AIS t
 """
 
 
+import re
+
 from src.fields import (
     UIntField,
     AsciiField,
@@ -61,3 +63,67 @@ def build_fields():
             fields[name] = cls(offset, length)
 
     return fields
+
+
+class Configurator:
+    """Configurator."""
+
+    default_len = 0x40
+
+    def __init__(self, args):
+        self.args = args
+        self._config = bytearray(self.default_len)
+        self.fields = build_fields()
+
+    def get_field(self, name):
+        field = self.fields.get(name)
+        return field.read(self._config)
+
+    def set_field(self, name, value):
+        field = self.fields.get(name)
+        field.validate(value)
+        field.write(self._config, value)
+
+    def get(self):
+        data = []
+        for arg in vars(self.args):
+            data.append({arg: self.get_field(arg)})
+
+        return data
+
+    def set(self):
+        for k, v in vars(self.args).items():
+            self.set_field(k, v)
+
+    def serial_cmd(
+        self,
+        ser,
+        tx_bytes,
+        expected_prefix,
+        read_extra=0,
+        max_retries=3,
+    ):
+        """Method for sending a command to the device."""
+        print(
+            'Sending command: '
+            f'{tx_bytes.decode('ascii', errors='ignore').strip()}'
+        )
+        # Send command and check response, with retries.
+        # Returns full response bytes.
+        for attempt in range(max_retries):
+            ser.reset_input_buffer()
+            ser.write(tx_bytes)
+            r = ser.read(len(expected_prefix))
+            print(
+                'Expected prefix: '
+                f'{r.decode('ascii', errors='ignore').strip()}',
+            )
+            if len(r) == len(expected_prefix) and r == expected_prefix:
+                if read_extra > 0:
+                    re = ser.read(read_extra)
+                    print(f'Read extra: {re.decode('ascii', errors='ignore').strip()}')
+                    return r + re
+
+                return r
+
+        return None

@@ -3,61 +3,10 @@ import re
 import serial
 
 from src.args_parser import cli_parser
-from src.field_builder import build_fields
+from src.config_schema import Configurator
 
 
 PASSWORD_DEFAULT = '000000'
-
-
-class Configurator:
-    """Configurator."""
-
-    def __init__(self):
-        self._config = bytearray(0x40)
-        self.fields = build_fields()
-
-    def get(self, name):
-        field = self.fields.get(name)
-        field.read(self._config)
-        return field
-
-    def set(self, name, value):
-        field = self.fields.get(name)
-        field.validate(value)
-        field.write(self._config, value)
-
-    def serial_cmd(
-        self,
-        ser,
-        tx_bytes,
-        expected_prefix,
-        read_extra=0,
-        max_retries=3,
-    ):
-        """Method for sending a command to the device."""
-        print(
-            'Sending command: '
-            f'{tx_bytes.decode('ascii', errors='ignore').strip()}'
-        )
-        # Send command and check response, with retries.
-        # Returns full response bytes.
-        for attempt in range(max_retries):
-            ser.reset_input_buffer()
-            ser.write(tx_bytes)
-            r = ser.read(len(expected_prefix))
-            print(
-                'Expected prefix: '
-                f'{r.decode('ascii', errors='ignore').strip()}',
-            )
-            if len(r) == len(expected_prefix) and r == expected_prefix:
-                if read_extra > 0:
-                    re = ser.read(read_extra)
-                    print(f'Read extra: {re.decode('ascii', errors='ignore').strip()}')
-                    return r + re
-
-                return r
-
-        return None
 
 
 if __name__ == '__main__':

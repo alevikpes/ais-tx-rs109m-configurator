@@ -26,6 +26,8 @@
 class Field:
     """Abstract class for fields."""
 
+    _is_saved = False
+
     def __init__(self, offset, length):
         self.offset = offset
         self.length = length
@@ -65,9 +67,13 @@ class UIntField(Field):
         )
 
     def write(self, config, value):
-        config[self.offset:self.offset+self.length] = (
-            int(value).to_bytes(self.length, 'little')
-        )
+        if self.validate(value):
+            config[self.offset:self.offset+self.length] = (
+                int(value).to_bytes(self.length, 'little')
+            )
+            self._is_saved = True
+
+        return self.is_saved, config
 
 
 class AsciiField(Field):
@@ -180,47 +186,100 @@ class Ais6BitField(Field):
         )
 
 
+#class VendorIdField(Field):
+#    """AIS 3 character vendor ID."""
+#
+#    def validate(self, value):
+#        if not isinstance(value, str):
+#            raise ValueError('VendorIdField requires string')
+#
+#        v = value.upper()
+#
+#        if len(v) != 3:
+#            raise ValueError('VendorId must be exactly 3 characters')
+#
+#        try:
+#            v.encode('ascii')
+#        except Exception:
+#            raise ValueError('VendorId must be ASCII')
+#
+#        # AIS encoding constraint (0x40-based printable range)
+#        for c in v:
+#            if not ('A' <= c <= 'Z' or '0' <= c <= '9'):
+#                raise ValueError(f'Invalid VendorId char: {c}')
+#
+#        return True
+#
+#    def read(self, config):
+#        b0 = config[28]
+#        b1 = config[29]
+#        b2 = config[30]
+#        chars = [
+#            (b0 >> 4) | ((b1 & 0x03) << 4),
+#            (b1 >> 2) | ((b2 & 0x0f) << 6),
+#            b2 & 0x3f,
+#        ]
+#        return ''.join(chr(c + 0x40) for c in chars)
+#
+#    def write(self, config, value):
+#        value = value.upper().ljust(3)[:3]
+#        data = [ord(c) - 0x40 for c in value]
+#        config[28] = data[2] | ((data[1] & 0x03) << 6)
+#        config[29] = ((data[1] >> 2) & 0x0f) | (data[0] << 4)
+#        config[30] = config[30] & 0xf0 | ((data[0] >> 4) & 0x0f)
+
+
 class VendorIdField(Field):
-    """AIS 3 character vendor ID."""
+    """AIS 3 character vendor ID (custom encoding)."""
 
-    def validate(self, value):
-        if not isinstance(value, str):
-            raise ValueError('VendorIdField requires string')
-
-        v = value.upper()
-
-        if len(v) != 3:
-            raise ValueError('VendorId must be exactly 3 characters')
-
-        try:
-            v.encode('ascii')
-        except Exception:
-            raise ValueError('VendorId must be ASCII')
-
-        # AIS encoding constraint (0x40-based printable range)
-        for c in v:
-            if not ('A' <= c <= 'Z' or '0' <= c <= '9'):
-                raise ValueError(f'Invalid VendorId char: {c}')
-
-        return True
-
-    def read(self, config):
-        b0 = config[28]
-        b1 = config[29]
-        b2 = config[30]
-        chars = [
-            (b0 >> 4) | ((b1 & 0x03) << 4),
-            (b1 >> 2) | ((b2 & 0x0f) << 6),
-            b2 & 0x3f,
+    def read(self, config) -> str:
+        vid = [
+            (config[29] >> 4) | ((config[30] & 0x03) << 4) | 0x40,
+            (config[28] >> 6) | ((config[29] & 0x07) << 2) | 0x40,
+            (config[28] & 0x3F) | 0x40,
         ]
-        return ''.join(chr(c + 0x40) for c in chars)
+        return ''.join(c for c in bytes(vid).decode(errors='ignore') if c.isalnum())
 
-    def write(self, config, value):
-        value = value.upper().ljust(3)[:3]
-        data = [ord(c) - 0x40 for c in value]
-        config[28] = data[2] | ((data[1] & 0x03) << 6)
-        config[29] = ((data[1] >> 2) & 0x0f) | (data[0] << 4)
-        config[30] = config[30] & 0xf0 | ((data[0] >> 4) & 0x0f)
+    def write(self, config, vid: str) -> None:
+        safe_vid = (
+            vid.encode('ascii', 'ignore')
+               .decode()
+               .upper()
+               .ljust(3, '\x00')[:3]
+               .encode('ascii')
+        )
+
+        config[28] = (safe_vid[2] & 0x3F) | ((safe_vid[1] << 6) & 0xFF)
+        config[29] = ((safe_vid[1] >> 2) & 0x0F) | ((safe_vid[0] << 4) & 0xFF)
+        config[30] = (config[30] & ~0x0F) | ((safe_vid[0] & 0x3F) >> 4)
+
+    def validate(self, config, vid: str) -> bool:
+        """
+        Validation rules:
+        - must be ASCII-safe (after sanitization)
+        - must be 1–3 chars after cleaning
+        - must be alphanumeric (final representation constraint)
+        - must round-trip correctly through storage
+        """
+        if not isinstance(vid, str):
+            return False
+
+        cleaned = vid.encode('ascii', 'ignore').decode().upper()
+        if not (1 <= len(cleaned.strip()) <= 3):
+            return False
+
+        if not cleaned.strip().isalnum():
+            return False
+
+        # round-trip validation
+        original = self.read(config)
+        self.write(config, vid)
+        roundtrip = self.read(config)
+
+        # restore original state (important for validation side-effect safety)
+        self.write(config, original)
+
+        return roundtrip == cleaned.strip()
 
 
 class PackedBitsField(Field):

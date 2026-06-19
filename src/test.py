@@ -1,6 +1,9 @@
 import serial
 import time
 
+from src.args_parser import cli_parser
+from src.config_schema import Configurator
+
 
 max_retries = 3
 
@@ -24,37 +27,44 @@ def serial_cmd(ser, tx_bytes, expected_prefix, read_extra=0):
     return None
 
 
-with serial.Serial(
-    '/dev/ttyUSB0',
-    baudrate=115200,
-    bytesize=serial.EIGHTBITS,
-    parity=serial.PARITY_NONE,
-    stopbits=serial.STOPBITS_ONE,
-    timeout=1,
-    write_timeout=3,
-) as ser:
-    # --- wake up device ---
-    ser.rts = False
-    ser.rts = True
-    ser.read(0xffff)
+if __name__ == '__main__':
 
-    # Send handshake
-    ser.write(bytes.fromhex('59 01 42 06 30 30 30 30 30 30'))
-    handshake = ser.read(32)
-    print(f'Handshake response [HEX]: {handshake.hex()}')
-    print(
-        'Handshake response: '
-        #f'{handshake.decode("ascii", errors="ignore").strip()}'
-        f'{bytes.fromhex("95 20")}'
-    )
+    args = cli_parser()
+    c = Configurator(args)
+    c.set()
 
-    # If you receive 95 20, try read-config
-    if handshake.startswith(bytes.fromhex('95 20')):
-        ser.write(bytes.fromhex('51 40'))
-        ser.flush()
 
-        time.sleep(0.5)
-
-        data = ser.read_all()
-        print(f'Config length: {data.len()}\nConfig [HEX]: {data.hex()}')
-        print(f'Config: {data.decode("ascii", errors="ignore").strip()}')
+    #with serial.Serial(
+    #    '/dev/ttyUSB0',
+    #    baudrate=115200,
+    #    bytesize=serial.EIGHTBITS,
+    #    parity=serial.PARITY_NONE,
+    #    stopbits=serial.STOPBITS_ONE,
+    #    timeout=1,
+    #    write_timeout=3,
+    #) as ser:
+    #    # --- wake up device ---
+    #    ser.rts = False
+    #    ser.rts = True
+    #    ser.read(0xffff)
+    #
+    #    # Send handshake
+    #    ser.write(bytes.fromhex('59 01 42 06 30 30 30 30 30 30'))
+    #    handshake = ser.read(32)
+    #    print(f'Handshake response [HEX]: {handshake.hex()}')
+    #    print(
+    #        'Handshake response: '
+    #        #f'{handshake.decode("ascii", errors="ignore").strip()}'
+    #        f'{bytes.fromhex("95 20")}'
+    #    )
+    #
+    #    # If you receive 95 20, try read-config
+    #    if handshake.startswith(bytes.fromhex('95 20')):
+    #        ser.write(bytes.fromhex('51 40'))
+    #        ser.flush()
+    #
+    #        time.sleep(0.5)
+    #
+    #        data = ser.read_all()
+    #        print(f'Config length: {data.len()}\nConfig [HEX]: {data.hex()}')
+    #        print(f'Config: {data.decode("ascii", errors="ignore").strip()}')
