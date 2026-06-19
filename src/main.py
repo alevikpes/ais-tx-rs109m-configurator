@@ -1,295 +1,97 @@
-import argparse
 import re
 
 import serial
 
+import src.fields as fields_classes
+from src.args_parser import cli_parser
+from src.field_builder import build_fields
+from src.memory_map import MEMORY_MAP
+
 
 PASSWORD_DEFAULT = '000000'
-
-
-def cli_parser():
-    parser = argparse.ArgumentParser(
-        description='RS-109M Net Locator AIS configurator.',
-    )
-    parser.add_argument(
-        'device',
-        help='[Required] Serial port where the device is connected (e.g. /dev/ttyUSB0).',
-    )
-    parser.add_argument('-m', '--mmsi', help='MMSI.')
-    parser.add_argument('-n', '--ship-name', help='Ship name.')
-    parser.add_argument(
-        '-i',
-        '--interval',
-        help='Transmit interval in s [30..600].',
-    )
-    parser.add_argument(
-        '-t',
-        '--ship-type',
-        help='Ship type, eg sail=36, pleasure craft=37.',
-    )
-    parser.add_argument('-c', '--call-sign', help='Call sign.')
-    parser.add_argument(
-        '-v',
-        '--vendor-id',
-        help='AIS unit vendor id (3 characters).',
-    )
-    parser.add_argument('-u', '--unit-model', help='AIS unit vendor model code')
-    parser.add_argument(
-        '-s',
-        '--ser-num',
-        help=(
-            'AIS unit serial num '
-            '(some devices report battery level %% here).'
-        ),
-    )
-    parser.add_argument(
-        '-A',
-        '--refa',
-        help=(
-            'Reference A (distance AIS to bow (m); '
-            'some buoys report battery voltage here)'
-        ),
-    )
-    parser.add_argument(
-        '-B',
-        '--refb',
-        help='Reference B (distance AIS to stern (m).',
-    )
-    parser.add_argument(
-        '-C',
-        '--refc',
-        help='Reference C (distance AIS to port (m).',
-    )
-    parser.add_argument(
-        '-D',
-        '--refd',
-        help='Reference D (distance AIS to starboard (m).',
-    )
-    parser.add_argument(
-        '-P',
-        '--password',
-        help='Password to access Net Locator. Default is 000000.',
-    )
-    parser.add_argument(
-        '--setpass',
-        help='Set new password (use -P for current password).',
-    )
-    parser.add_argument(
-        '--clearpass',
-        help='Clear password (use -P for current password)',
-        action='store_true',
-    )
-    parser.add_argument(
-        '-E',
-        '--extended',
-        help='Operate on 0xff size config instead of default 0x40',
-        action='store_true',
-    )
-    parser.add_argument(
-        '-W',
-        '--write',
-        help='Write config to Net Locator',
-        action='store_true',
-    )
-    parser.add_argument(
-        '-R',
-        '--noread',
-        help='Do not read from Net Locator',
-        action='store_true',
-    )
-    return parser.parse_args()
-
-
-def serial_cmd(ser, tx_bytes, expected_prefix, read_extra=0, max_retries = 3):
-    print(f'Writing data: {tx_bytes.decode('ascii', errors='ignore').strip()}')
-    # Send command and check response, with retries. Returns full response bytes.
-    for attempt in range(max_retries):
-        ser.reset_input_buffer()
-        ser.write(tx_bytes)
-        r = ser.read(len(expected_prefix))
-        print(f'Expected prefix: {r.decode('ascii', errors='ignore').strip()}')
-        if len(r) == len(expected_prefix) and r == expected_prefix:
-            if read_extra > 0:
-                re = ser.read(read_extra)
-                print(f'Read extra: {re.decode('ascii', errors='ignore').strip()}')
-                return r + re
-
-            return r
-
-    return None
-
-
-class Field:
-    """Abstract class for fields."""
-
-    def __init__(self, offset, length):
-        self.offset = offset
-        self.length = length
-
-    def read(self, config):
-        raise NotImplementedError
-
-    def write(self, config, value):
-        raise NotImplementedError
-
-
-class UIntField(Field):
-    """Unsigned little-endian integer."""
-
-    def read(self, config):
-        return int.from_bytes(
-            config[self.offset:self.offset+self.length],
-            byteorder='little'
-        )
-
-    def write(self, config, value):
-        config[self.offset:self.offset+self.length] = (
-            int(value).to_bytes(self.length, 'little')
-        )
-
-
-class AsciiField(Field):
-    """Fixed length ASCII string."""
-
-    def read(self, config):
-        return bytes(
-            config[self.offset:self.offset+self.length]
-        ).decode('ascii', errors='ignore').rstrip()
-
-    def write(self, config, value):
-        data = value.encode('ascii', errors='ignore')
-        config[self.offset:self.offset+self.length] = (
-            data[:self.length].ljust(self.length, b' ')
-        )
-
-
-class Ais6BitField(Field):
-    """AIS 6-bit encoded string."""
-
-    def _fromxbit(self, ba, x=6):
-        n = len(ba) * 8 // x
-        result = bytearray()
-        for i in range(n):
-            pos = i * x // 8
-            shift = i * x % 8
-            val = (ba[pos] >> shift) & ((1 << x)-1)
-            if shift + x > 8:
-                val |= (ba[pos+1] << (8-shift)) & ((1 << x)-1)
-
-            if val != 0 and not (val & 0x20):
-                val |= 0x40
-
-            result.append(val)
-
-        return result
-
-    def _toxbit(self, data, x=6):
-        data = bytearray(
-            data.encode('ascii', errors='ignore')
-            .upper()
-        )
-        size = (len(data)*x + 7)//8
-        result = bytearray(size)
-        for i, value in enumerate(data):
-            value &= (1 << x)-1
-            pos = i*x//8
-            shift = i*x%8
-            result[pos] |= value << shift
-            if shift+x > 8:
-                result[pos+1] |= value >> (8-shift)
-
-        return result
-
-    def read(self, config):
-        raw = config[self.offset:self.offset+self.length]
-        return self._fromxbit(raw).decode('ascii').rstrip()
-
-    def write(self, config, value):
-        encoded = self._toxbit(value)
-        config[self.offset:self.offset+self.length] = (
-            encoded.ljust(self.length, b'\x00')
-        )
-
-
-class VendorIdField(Field):
-    """AIS 3 character vendor ID."""
-
-    def read(self, config):
-        b0 = config[28]
-        b1 = config[29]
-        b2 = config[30]
-        chars = [
-            (b0 >> 4) | ((b1 & 0x03) << 4),
-            (b1 >> 2) | ((b2 & 0x0f) << 6),
-            b2 & 0x3f,
-        ]
-        return ''.join(chr(c + 0x40) for c in chars)
-
-    def write(self, config, value):
-        value = value.upper().ljust(3)[:3]
-        data = [ord(c) - 0x40 for c in value]
-        config[28] = data[2] | ((data[1] & 0x03) << 6)
-        config[29] = ((data[1] >> 2) & 0x0f) | (data[0] << 4)
-        config[30] = config[30] & 0xf0 | ((data[0] >> 4) & 0x0f)
-
-
-class PackedBitsField(Field):
-    """Generic bit-field."""
-
-    def __init__(self, offset, shift, bits):
-        super().__init__(offset, 1)
-        self.shift = shift
-        self.mask = (1 << bits)-1
-
-    def read(self, config):
-        return (config[self.offset] >> self.shift) & self.mask
-
-    def write(self, config, value):
-        config[self.offset] &= ~(self.mask << self.shift)
-
-        config[self.offset] |= (int(value) & self.mask) << self.shift
-
-
-FIELDS = {
-    'interval': UIntField(0, 1),
-    'mmsi': UIntField(1, 4),
-    'ship_name': AsciiField(5, 20),
-    'sernum': UIntField(25, 3),
-    'unitmodel': PackedBitsField(27, 4, 4),
-    'vendor_id': VendorIdField(28, 3),
-    'ship_type': UIntField(31, 1),
-    'call_sign': Ais6BitField(32, 6),
-}
+#FIELDS = {
+#    'interval': fields_classes.UIntField(0, 1),
+#    'mmsi': fields_classes.UIntField(1, 4),
+#    'ship_name': fields_classes.AsciiField(5, 20),
+#    'ser_num': fields_classes.UIntField(25, 3),
+#    'unit_model': fields_classes.PackedBitsField(27, 4, 4),
+#    'vendor_id': fields_classes.VendorIdField(28, 3),
+#    'ship_type': fields_classes.UIntField(31, 1),
+#    'call_sign': fields_classes.Ais6BitField(32, 6),
+#    'ais2bow': ,
+#    'ais2stern': ,
+#    'ais2port': ,
+#    'ais2star': ,
+#    #'ais_ref': fields.AISReferenceField(38, 4),
+#}
 
 
 class Configurator:
 
     """Configurator.
 
-    Parameter  | Offset                         | Length (bytes)
+    Parameter  | Offset                         | Length (bytes)    | Comments
     ----------------------------------------------------------
     interval   | 0                              | 1
     mmsi       | 1–4                            | 4
     ship_name  | 5–24                           | 20
-    ser_num    | 25–27 (packed with unitmodel)  | 3
+    ser_num    | 25–27 (packed with unit_model) | 3                 | some buoys report battery charge level here
     unit_model | upper nibble of byte 27        | 0.5
     vendor_id  | 28–30 (packed)                 | 3
     ship_type  | 31                             | 1
     call_sign  | 32–37                          | 6
-    refa       | 38–39 (packed)                 | 2
-    refb       | 39–40 (packed)                 | 2
-    refc       | 40–41 (packed)                 | 2
-    refd       | 41                             | 1
+    ais2bow    | 38–39 (packed)                 | 2                 | distance AIS to bow (m); some buoys report battery voltage here
+    ais2stern  | 39–40 (packed)                 | 2                 | distance AIS to stern (m)
+    ais2port   | 40–41 (packed)                 | 2                 | distance AIS to port (m)
+    ais2star   | 41                             | 1                 | distance AIS to starboard (m)
     """
 
     def __init__(self):
         self._config = bytearray(0x40)
+        self.fields = build_fields(MEMORY_MAP)
 
     def get(self, name):
-        return FIELDS[name].read(self._config)
+        field = self.fields.get(name)
+        field.read(self._config)
+        return field
 
     def set(self, name, value):
-        FIELDS[name].write(self._config, value)
+        field = self.fields.get(name)
+        field.validate(value)
+        field.write(self._config, value)
+
+    def serial_cmd(
+        self,
+        ser,
+        tx_bytes,
+        expected_prefix,
+        read_extra=0,
+        max_retries=3,
+    ):
+        """Method for sending a command to the device."""
+        print(
+            'Sending command: '
+            f'{tx_bytes.decode('ascii', errors='ignore').strip()}'
+        )
+        # Send command and check response, with retries.
+        # Returns full response bytes.
+        for attempt in range(max_retries):
+            ser.reset_input_buffer()
+            ser.write(tx_bytes)
+            r = ser.read(len(expected_prefix))
+            print(
+                'Expected prefix: '
+                f'{r.decode('ascii', errors='ignore').strip()}',
+            )
+            if len(r) == len(expected_prefix) and r == expected_prefix:
+                if read_extra > 0:
+                    re = ser.read(read_extra)
+                    print(f'Read extra: {re.decode('ascii', errors='ignore').strip()}')
+                    return r + re
+
+                return r
+
+        return None
 
 
 if __name__ == '__main__':
@@ -313,20 +115,6 @@ if __name__ == '__main__':
         timeout=1,
         write_timeout=3,
     ) as ser:
-    #if args.device != None:
-    #    ser = serial.Serial()
-    #    ser.port = args.device
-
-    #    ser.baudrate = 115200
-    #    ser.bytesize = serial.EIGHTBITS
-    #    ser.parity = serial.PARITY_NONE
-    #    ser.stopbits = serial.STOPBITS_ONE
-
-    #    ser.timeout = 1
-    #    ser.write_timeout = 3
-
-    #    ser.open()
-
         # RTS toggle to wake/reset the device (this is usually hard-wired,
         # but we do that here to follow manufacturer specs)
         ser.rts = False
