@@ -2,8 +2,8 @@ import re
 
 import serial
 
-from src.args_parser import cli_parser
-from src.config_schema import Configurator
+from args_parser import cli_parser
+from config_schema import Configurator
 
 
 PASSWORD_DEFAULT = '000000'
@@ -80,8 +80,10 @@ if __name__ == '__main__':
 
         if args.setpass != None:
             newpass = args.setpass
-            if not re.match('^[0-9]{1,'+str(password_maxlen)+'}$', newpass):
-                print('New password: incorrect format, should match [0-9]{1,'+str(password_maxlen)+'}')
+            #if not re.match('^[0-9]{1,'+str(password_maxlen)+'}$', newpass):
+            if not isinstance(newpass, int) and (len(newpass) < 1 and len(newpass) > 6):
+                #print('New password: incorrect format, should match [0-9]{1,'+str(password_maxlen)+'}')
+                print('Password must be an integer from 1 up to 6 digits!')
                 exit(1)
 
             newpass_prepared = (newpass.encode() + PASSWORD_DEFAULT.encode())[:password_maxlen]
@@ -100,9 +102,6 @@ if __name__ == '__main__':
                 exit(1)
 
             c.config = r[2:]
-    else:
-        print('Operating on default config:')
-        print()
 
     if args.mmsi != None:
         c.mmsi = args.mmsi

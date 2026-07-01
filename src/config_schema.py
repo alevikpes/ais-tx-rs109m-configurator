@@ -19,7 +19,7 @@ ais2star   | 41                             | 1                 | distance AIS t
 
 import re
 
-from src.fields import (
+from fields import (
     UIntField,
     AsciiField,
     Ais6BitField,

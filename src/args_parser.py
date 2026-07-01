@@ -21,7 +21,7 @@ def cli_parser():
     parser.add_argument(
         '-t',
         '--ship-type',
-        help='Ship type, eg sail=36, pleasure craft=37.',
+        help='Ship type, eg sail = 36, pleasure craft = 37.',
     )
     parser.add_argument('-c', '--call-sign', help='Call sign.')
     parser.add_argument(
@@ -42,24 +42,24 @@ def cli_parser():
         '-A',
         '--ais2bow',
         help=(
-            'distance AIS to bow (m) '
+            'Distance from AIS device to bow (m) '
             '(some buoys report battery voltage here).'
         ),
     )
     parser.add_argument(
         '-B',
         '--ais2stern',
-        help='distance AIS to stern (m).',
+        help='Distance from AIS device to stern (m).',
     )
     parser.add_argument(
         '-C',
         '--ais2port',
-        help='distance AIS to port (m).',
+        help='Distance from AIS device to port (m).',
     )
     parser.add_argument(
         '-D',
         '--ais2star',
-        help='distance AIS to starboard (m).',
+        help='Distance from AIS device to starboard (m).',
     )
     parser.add_argument(
         '-P',
@@ -72,25 +72,25 @@ def cli_parser():
     )
     parser.add_argument(
         '--clearpass',
-        help='Clear password (use -P for current password)',
+        help='Clear password (use -P for current password).',
         action='store_true',
     )
     parser.add_argument(
         '-E',
         '--extended',
-        help='Operate on 0xff size config instead of default 0x40',
+        help='Operate on 0xff size config instead of default 0x40.',
         action='store_true',
     )
     parser.add_argument(
         '-W',
         '--write',
-        help='Write config to Net Locator',
+        help='Write config to the device.',
         action='store_true',
     )
     parser.add_argument(
         '-R',
         '--noread',
-        help='Do not read from Net Locator',
+        help='Do not read from the device.',
         action='store_true',
     )
     return parser.parse_args()
