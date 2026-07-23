@@ -90,5 +90,5 @@ with serial.Serial(
         time.sleep(0.5)
 
         data = ser.read_all()
-        print(f'Config length: {data.len()}\nConfig [HEX]: {data.hex()}')
+        print(f'Config length: {len(data)}\nConfig [HEX]: {data.hex()}')
         print(f'Config: {data.decode("ascii", errors="ignore").strip()}')
