@@ -1,8 +1,8 @@
 import serial
 import time
 
-from src.args_parser import cli_parser
-from src.config_schema import Configurator
+from args_parser import cli_parser
+from config_schema import Configurator
 
 
 max_retries = 3
