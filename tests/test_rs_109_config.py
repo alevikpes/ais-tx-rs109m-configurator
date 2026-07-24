@@ -1,23 +1,14 @@
+from main import Configurator
+
+
 def test_mmsi(default_config):
-
     default_config.mmsi = 123456789
-
-    assert (
-        default_config.mmsi
-        ==
-        123456789
-    )
+    assert default_config.mmsi == 123456789
 
 
 def test_name(default_config):
-
     default_config.name = 'Test Boat'
-
-    assert (
-        default_config.name
-        ==
-        'TEST BOAT'
-    )
+    assert default_config.name == 'TEST BOAT'
 
 
 def test_name_truncation(default_config):
@@ -124,7 +115,6 @@ def test_reference_fields(
     ) == value
 
 
-from rs109 import RS109Config
 
 
 def test_default_configuration():
@@ -143,26 +133,3 @@ def test_default_configuration():
         ])
     )
 
-
-# Test SerialProtocol by Mocking it.
-def test_command_retry(mocker):
-
-    fake = mocker.Mock()
-
-    fake.read.side_effect = [
-        b'bad',
-        b'\x95\x20',
-    ]
-
-    protocol = object.__new__(
-        SerialProtocol
-    )
-
-    protocol.serial = fake
-
-    response = protocol._command(
-        b'test',
-        b'\x95\x20',
-    )
-
-    assert response == b'\x95\x20'

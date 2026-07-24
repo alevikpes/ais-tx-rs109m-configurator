@@ -2,16 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from rs109 import RS109Config
+from src.main import Configurator
 
 
 @pytest.fixture
-def default_config() -> RS109Config:
-    '''
-    Return a fresh default configuration.
-    '''
-
-    return RS109Config()
+def default_config() -> Configurator:
+    '''Return a fresh default configuration.'''
+    return Configurator()
 
 
 #@pytest.fixture
