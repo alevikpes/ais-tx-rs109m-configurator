@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.main import Configurator
+from src.configurator import Configurator
 
 
 @pytest.fixture

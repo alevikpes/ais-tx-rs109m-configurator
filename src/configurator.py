@@ -36,12 +36,72 @@ class Configurator:
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
     ])
     default_len = 0x40
+    _config = None
 
     def __init__(self, config=None):
-        self.set_config(config)
+        self.config = config
 
     def __repr__(self):
         return f'[ 0x {self._config.hex('#').replace("#", ", 0x")} ]'
+
+    @staticmethod
+    def _fromxbit(ba, x=6):
+        if ((x < 1) or (x > 7)):
+            raise ValueError('BitLen must between 1 and 7')
+
+        if len(ba) < 1:
+            raise ValueError('Must supply non-empty array')
+
+        n = len(ba) * 8 // x
+        b = bytearray([0 for i in range(n)])
+
+        for i in range(n):
+            pos = i * x // 8
+            shift = i * x % 8
+
+            b[i] = (ba[pos] >> shift) & ((1 << x) -1)
+            remaining = shift + x - 8
+            if remaining > 0:
+                b[i] |= (ba[pos + 1] << (8 -  shift)) & ((1 << x) -1)
+
+            if (b[i] & 0x20) != 0x20 and b[i] != 0:
+                # not a digit, is alpha
+                b[i] = (b[i] & 0x1f) | 0x40
+
+        return b
+
+    @staticmethod
+    def _toxbit(ba: bytes, x: int=6):
+        if ((x < 1) or (x > 7)):
+            raise ValueError('BitLen must between 1 and 7')
+
+        if len(ba) < 1:
+            return [0xff, 0xff, 0xff, 0xff, 0xff, 0xff]
+
+        ba = bytearray(ba.decode().upper().encode('ascii'))
+
+        n = len(ba) * x // 8
+        if (len(ba) * x % 8) > 0:
+            n += 1
+
+        if n == 0:
+            n = 1
+
+        b = bytearray([0 for i in range(n)])
+
+        for i in range(len(ba)):
+            pos = i * x // 8
+            shift = i * x % 8
+
+            ba[i] = ba[i] & ((1 << x) -1)
+
+            b[pos] |= (ba[i] << shift) & 0xff
+            remaining = shift + x - 8
+            # print(ba[i], " i=", i, " pos=", pos, " shift=", shift, " remaining=", remaining)
+            if remaining > 0:
+                b[pos +1] |= (ba[i] >> (8 - shift))
+
+        return b
 
     def _get_uint(self, offset, length):
         return int.from_bytes(self._config[offset:offset + length], 'little')
@@ -88,15 +148,56 @@ class Configurator:
     def _set_byte(self, offset, value):
         self._config[offset] = int(value) & 0xff
 
-    def _get_ascii(self, offset, length):
-        return bytes(self._config[offset:offset+length]).decode('ascii')
+    def _get_ascii(self, offset, length, encoding='ascii', strip=True):
+        s = bytes(self._config[offset:offset + length]).decode(encoding)
+        return s.rstrip(' \x00') if strip else s
 
-    def _set_ascii(self, offset, length, value):
-        self._config[offset:offset+length] = (
-            value.encode('ascii', 'ignore')[:length]
-            .ljust(length, b' ')
+    def _set_ascii(
+        self,
+        offset,
+        length,
+        value,
+        encoding='ascii',
+        pad=' ',
+        uppercase=False
+    ):
+        value = str(value)
+        if uppercase:
+            value = value.upper()
+
+        data = (
+            value.encode(encoding, 'ignore')[:length]
+            .ljust(length, pad.encode(encoding))
+        )
+        self._config[offset:offset + length] = data
+
+    def _get_xbit(self, offset, length, width=6, reverse=False):
+        s = self._fromxbit(
+            self._config[offset:offset + length],
+            width,
+            True
+        ).decode('ascii')
+
+        if reverse:
+            s = s[::-1]
+
+        return s.rstrip(' @\x00')
+
+
+    def _set_xbit(self, offset, length, value, width=6, reverse=False):
+        value = ''.join(
+            c.upper()
+            for c in str(value)
+            if c.isalnum()
         )
 
+        if reverse:
+            value = value[::-1]
+
+        encoded = self._toxbit(value, width, True)
+        self._config[offset:offset + length] = encoded[:length].ljust(length, b'\x00')
+
+    ### Config ###
     @property
     def config(self):
         return self._config
@@ -111,10 +212,10 @@ class Configurator:
         else:
             clen = min(len(config), 0xff)
             self._config = bytearray(
-                config[:clen] +
-                self.default_config[clen:]
+                config[:clen] + self.default_config[clen:]
             )
 
+    ### MMSI ###
     @property
     def mmsi(self):
         return self._get_uint(1, 4)
@@ -123,22 +224,22 @@ class Configurator:
     def mmsi(self, mmsi):
         self._set_uint(1, 4, mmsi)
 
+    ### Ship Name ###
     @property
     def ship_name(self):
-        name = bytes(self._config[5:25]).decode('ascii').strip()
-        return name
+        return self._get_ascii(5, 20)
 
     @ship_name.setter
     def ship_name(self, name):
-        # TODO: check for invalid chars, this one is incomplete
-        safe_name = name \
-            .encode('ascii', 'ignore') \
-            .decode() \
-            .upper() \
-            .ljust(20, ' ') \
-            .encode('ascii')
-        self._config[5:25] = safe_name
+        self._set_ascii(
+            5,
+            20,
+            name,
+            uppercase=True,
+            pad=' '
+        )
 
+    ### Interval ###
     @property
     def interval(self):
         return self._get_byte(0) * 30
@@ -148,6 +249,7 @@ class Configurator:
         seconds = max(30, min(600, int(seconds)))
         self._set_byte(0, seconds // 30)
 
+    ### Ship Type ###
     @property
     def ship_type(self):
         return self._get_byte(31)
@@ -156,162 +258,84 @@ class Configurator:
     def ship_type(self, shiptype):
         self._set_byte(31, shiptype)
 
+    ### Vendor ID ###
     @property
     def vendor_id(self):
-        vid = [
-            (self._config[29] >> 4) | ((self._config[30]  & 0x03) << 4) | 0x40,
-            (self._config[28] >> 6) | ((self.config[29] & 0x07) << 2) | 0x40,
-            (self._config[28] & 0x3f) | 0x40,
-        ]
-        return  ''.join(c if c.isalnum() else '' for c in bytes(vid).decode())
+        chars = []
+        for start_bit in (29 * 8 + 4, 28 * 8 + 6, 28 * 8):
+            c = chr(self._get_bits(start_bit, 6) | 0x40)
+            if c.isalnum():
+                chars.append(c)
+
+        return ''.join(chars)
 
     @vendor_id.setter
     def vendor_id(self, vid):
-        # TODO: check for invalid chars, this one is incomplete
-        safe_vid = vid \
-            .encode('ascii', 'ignore') \
-            .decode() \
-            .upper() \
-            .ljust(3, '\x00')[:3] \
-            .encode('ascii')
-        print(safe_vid)
-        self._config[28] = (safe_vid[2] & 0x3f) | ((safe_vid[1] << 6 ) & 0xff)
-        self._config[29] = (
-            ((safe_vid[1] >> 2) & 0x0f) |
-            ((safe_vid[0] << 4) & 0xff)
+        safe_vid = (
+            vid.encode('ascii', 'ignore')
+               .decode()
+               .upper()
+               .ljust(3, '\x00')[:3]
         )
-        self._config[30] = (
-            (self._config[30] & ~0x0f) |
-            ((safe_vid[0] & 0x3f) >> 4)
-        )
+        self._set_bits(29 * 8 + 4, 6, ord(safe_vid[0]) & 0x3f)
+        self._set_bits(28 * 8 + 6, 6, ord(safe_vid[1]) & 0x3f)
+        self._set_bits(28 * 8,     6, ord(safe_vid[2]) & 0x3f)
 
+    ### Unit Model ###
     @property
     def unit_model(self):
-        unitmodel = self._config[27] >> 4
-        return unitmodel
+        return self._get_bits(27 * 8 + 4, 4)
 
     @unit_model.setter
     def unit_model(self, unitmodel):
-        unitmodel = int(unitmodel)
-        if unitmodel < 0 or unitmodel > 15:
-            raise ValueError('UnitModel must be 0 < unitmodel <= 15')
+        self._set_bits(27 * 8 + 4, 4, value)
 
-        self._config[27] = (
-            (self._config[27] & 0x0f) |
-            ((int(unitmodel) & 0x0f) << 4)
-        )
-
+    ### Serial Number ###
     @property
     def ser_num(self):
-        low16 = self._get_uint(25, 2)
-        high4 = self._config[27] & 0x0f
-        return low16 | (high4 << 16)
+        return self._get_bits(25 * 8, 20)
 
     @ser_num.setter
     def ser_num(self, sernum):
-        sernum = int(sernum)
-        if not 0 <= sernum <= 0xfffff:
-            raise ValueError(
-                'Serial number must be an integer between 0 and 1048575 digits'
-            )
+        self._set_bits(25 * 8, 20, value)
 
-        self._set_uint(25, 2, sernum & 0&ffff)
-        self._config[27] = (self._config[27] & 0xf0) | ((sernum >> 16) & 0x0f)
-
+    ### Call Sign ###
     @property
     def call_sign(self):
-        # TODO: check if it is 32:37 or 32:38
-        # derek@conniffe.com - changed to 32:38 to
-        # support valid 7 digit callsigns
-        s = fromxbit(self._config[32:38], 6, True).decode('ascii')[::-1]
-        return ''.join(c if c.isalnum() else '' for c in s)
+        return self._get_xbit(32, 6, reverse=True)
 
     @call_sign.setter
-    def call_sign(self, cs):
-        safe_cs = ''.join(c if c.isalnum() else '' for c in cs)
-        # derek@conniffe.com - changed to 32:38 to
-        # support valid 7 digit callsigns
-        self._config[32:38] = toxbit(safe_cs[::-1])
+    def call_sign(self, value):
+        self._set_xbit(32, 6, value, reverse=True)
 
     @property
     def ais2bow(self):
-        return (self._config[39] >> 5) | ((self.config[38] & ((1<<6) -1)) << 3)
+        return self._get_bits(38 * 8 + 3, 9)
 
     @ais2bow.setter
-    def ais2bow(self, a):
-        if int(a) > (1<<9):
-            raise ValueError('Reference a must be <= 511')
-
-        if int(a) < 0:
-            raise ValueError('Reference a must be >= 0')
-
-        self._config[39] = (
-            (self._config[39] & ((1<<5) -1)) |
-            (((int(a) & ((1<<6) -1)) << 5) & 0xff)
-        )
-        self._config[38] = (
-            (self._config[38] & ~((1<<4) -1)) |
-            ((int(a) & ((1<<9) -1)) >> 3)
-        )
+    def ais2bow(self, value):
+        self._set_bits(38 * 8 + 3, 9, value)
 
     @property
     def ais2stern(self):
-        return (
-            (self._config[40] >> 4) |
-            ((self._config[39] & ((1<<5) -1)) << 4)
-        )
+        return self._get_bits(39 * 8, 9)
 
     @ais2stern.setter
-    def ais2stern(self, b):
-        if int(b) > (1<<9):
-            raise ValueError('Reference b must be <= 511')
-
-        if int(b) < 0:
-            raise ValueError('Reference b must be >= 0')
-
-        self._config[40] = (
-            (self._config[40] & ((1<<4) -1)) |
-            (((int(b) & ((1<<6) -1)) << 4) & 0xff)
-        )
-        self._config[39] = (
-            (self._config[39] & ~((1<<5) -1)) |
-            ((int(b) & ((1<<9) -1)) >> 4)
-        )
+    def ais2stern(self, value):
+        self._set_bits(39 * 8, 9, value)
 
     @property
     def ais2port(self):
-        return (self._config[41] >> 6) | ((self._config[40] & ((1<<4) -1)) << 2)
+        return self._get_bits(40 * 8 + 2, 6)
 
     @ais2port.setter
     def ais2port(self, c):
-        if int(c) > (1<<6):
-            raise ValueError('Reference c must be <= 63')
-
-        if int(c) < 0:
-            raise ValueError('Reference c must be >= 0')
-
-        self._config[41] = (
-            (self._config[41] & ((1<<6) -1)) |
-            (((int(c) & ((1<<6) -1)) << 6) & 0xff)
-        )
-        self._config[40] = (
-            (self._config[40] & ~((1<<4) -1)) |
-            ((int(c) & ((1<<6) -1)) >> 2)
-        )
+        self._set_bits(40 * 8 + 2, 6, value)
 
     @property
     def ais2star(self):
-        return self._config[41] & ((1<<6) -1)
+        return self._get_bits(41 * 8, 6)
 
     @ais2star.setter
     def ais2star(self, d):
-        if int(d) > (1<<6):
-            raise ValueError('Reference d must be <= 63')
-
-        if int(d) < 0:
-            raise ValueError('Reference d must be >= 0')
-
-        self._config[41] = (
-            (self._config[41] & ~((1<<6) -1)) |
-            (int(d) & ((1<<6) -1))
-        )
+        self._set_bits(41 * 8, 6, value)
