@@ -113,7 +113,7 @@ class Configurator:
     def config(self, config):
         # TODO: implement differently, as setting config as slices
         # config[34:38] might be convenient
-        if config == []:
+        if not config:
             self._config = self.extended_config[:self.default_len]
         else:
             clen = 0xff if (len(config) > 0xff) else len(config)
@@ -268,11 +268,11 @@ class Configurator:
 
     ### AIS to bow ###
     @property
-    def refa(self):
+    def ais2bow(self):
         return (self._config[39] >> 5) | ((self.config[38] & ((1 << 6) - 1)) << 3)
 
-    @refa.setter
-    def refa(self, a):
+    @ais2bow.setter
+    def ais2bow(self, a):
         a = self._validate(a, 9, 'Reference a')
 
         self._config[39] = (
@@ -286,11 +286,11 @@ class Configurator:
 
     ### AIS to stern ###
     @property
-    def refb(self):
+    def ais2stern(self):
         return (self._config[40] >> 4) | ((self._config[39] & ((1 << 5) - 1)) << 4)
 
-    @refb.setter
-    def refb(self, b):
+    @ais2stern.setter
+    def ais2stern(self, b):
         b = self._validate(b, 9, 'Reference b')
 
         self._config[40] = (
@@ -304,11 +304,11 @@ class Configurator:
 
     ### AIS to port ###
     @property
-    def refc(self):
+    def ais2port(self):
         return (self._config[41] >> 6) | ((self._config[40] & ((1 << 4) - 1)) << 2)
 
-    @refc.setter
-    def refc(self, c):
+    @ais2port.setter
+    def ais2port(self, c):
         c = self._validate(c, 6, 'Reference c')
 
         self._config[41] = (
@@ -322,16 +322,14 @@ class Configurator:
 
     ### AIS to starboard ###
     @property
-    def refd(self):
+    def ais2star(self):
         return self._config[41] & ((1 << 6) - 1)
 
-    @refd.setter
-    def refd(self, d):
+    @ais2star.setter
+    def ais2star(self, d):
         d = self._validate(d, 6, 'Reference d')
 
         self._config[41] = (
             (self._config[41] & ~((1 << 6) - 1)) |
             (d & ((1 << 6) - 1))
         )
-
-    def get_ais_position(self, field_name):
